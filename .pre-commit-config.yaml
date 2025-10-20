@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        exclude: "^tests/data/.*"
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+        exclude: "^tests/data/.*"
+
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff
+        name: Lint with Ruff
+        args: [ --fix ]
+        types: [ python ]
+
+      - id: ruff-format
+        name: Format with Ruff
+        types: [ python ]

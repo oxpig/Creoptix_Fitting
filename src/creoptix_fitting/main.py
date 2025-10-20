@@ -1,4 +1,7 @@
-import numpy as np
 import pandas as pd
+import pathlib
 
-good_fit_data = pd.read_excel("C:/Users/stat0524-admin/Documents/Creoptix/Good fit data examp.xlsx",sheet_name="adjusted sample sensogram")
+good_fit_data = pd.read_excel(
+    pathlib.Path("data/good_fit_data.xlsx"), sheet_name="adjusted sample sensogram"
+)
+print(good_fit_data.head())
