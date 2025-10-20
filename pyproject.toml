@@ -1,0 +1,17 @@
+[build-system]
+requires = ["uv_build>=0.8.7,<0.10.0"]
+build-backend = "uv_build"
+
+[project]
+name = "creoptix-fitting"
+version = "0.1.8"
+description = "Tools for fitting to the sensograms created by Creoptix runs."
+readme = "README.md"
+license-files = ["LICENCE"]
+authors = [
+  { name = "Chris Taylor", email = "opig@stats.ox.ac.uk" },
+]
+dependencies = [
+    "numpy",
+    "pandas"
+]
