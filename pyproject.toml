@@ -9,11 +9,14 @@ description = "Tools for fitting to the sensograms created by Creoptix runs."
 readme = "README.md"
 license-files = ["LICENCE"]
 authors = [
-  { name = "Chris Taylor", email = "opig@stats.ox.ac.uk" },
+  { name = "Chris Taylor", email = "christopher.taylor@stats.ox.ac.uk" },
 ]
 dependencies = [
     "numpy",
     "openpyxl>=3.1.5",
     "pandas",
+    "matplotlib",
+    "scipy",
     "ruff>=0.14.1",
+    "h5py",
 ]
