@@ -95,10 +95,12 @@ def plot_sensogram(dataset, cycle_id, blank_dataset=None, diff=True, labels=None
     ydata1 = dataset[HDF5_CYCLE_DSET_COLS["FC1"]][:]
     ydata2 = dataset[HDF5_CYCLE_DSET_COLS["FC2"]][:]
 
-    window = min(len(ydata1),len(ydata2))  # get shorter length, assume start at 0
+    window = min(len(ydata1),len(ydata2),len(blank_dataset[HDF5_CYCLE_DSET_COLS["FC1"]]))  # get shorter length, assume start at 0
+    print("LENS",len(ydata1),len(ydata2),len(blank_dataset[HDF5_CYCLE_DSET_COLS["FC1"]]))  # get shorter length, assume start at 0
     if blank_dataset:
         ydata1 = ydata1[:window] - blank_dataset[HDF5_CYCLE_DSET_COLS["FC1"]][:window]
         ydata2 = ydata2[:window] - blank_dataset[HDF5_CYCLE_DSET_COLS["FC2"]][:window]
+        tdata = tdata[:window]
 
     if diff:
         ax1.scatter(tdata, ydata2 - ydata1, label="Cycle ID: " + str(cycle_id))
@@ -129,11 +131,13 @@ def plot_sensogram(dataset, cycle_id, blank_dataset=None, diff=True, labels=None
     return
 
 
-def classify_sensogram(cycle_id,dataset, name=None):
-    if my_cycles[cycle_id-1].returned_to_baseline(dataset):
+def classify_sensogram(cycle_id,dataset,channelA="FC1",channelB="FC2",name=None):
+    rtb = my_cycles[cycle_id-1].returned_to_baseline(dataset)
+    if rtb:
         return "Good"
     else:
         return "Bad"
+
 
 #
 # good_fit_data = pd.read_excel(
@@ -200,7 +204,7 @@ path_to_file = pathlib.Path("data/example/cyclesData.h5")
 with h5py.File(path_to_file, "r") as h5_file:
     # sets_to_plot = [get_h5_data_for_guid(h5_file,guid) for guid in sample_idx_to_guid.values()][0:20]
 
-    for cyc in my_cycles[0:20]:
+    for cyc in my_cycles:
         dataset = get_h5_data_for_guid(h5_file, cyc.guid)
         cyc.calculate_baselines(dataset)
         print(cyc.cycle_num," returned to baseline?  ",cyc.returned_to_baseline(dataset))
@@ -211,6 +215,8 @@ with h5py.File(path_to_file, "r") as h5_file:
         else:
             blank_dataset = None
         print(cyc.cycle_num,"has Most recent blank :",most_recent_blank)
+        if cyc.type != "Sample":
+            continue # don't plot
         plot_sensogram(
             dataset,
             cycle_id=cyc.cycle_num,
