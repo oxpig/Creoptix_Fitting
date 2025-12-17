@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 import h5py  # pandas HDF5 support is limited to specific structures -- need h5py
 
-CREOPTIX_TIME_STEP = 0.1    # timestep seems to be fixed by Creoptix
+CREOPTIX_TIME_STEP = 0.1  # timestep seems to be fixed by Creoptix
 
 HDF5_CYCLE_DSET_COLS = {
     "Time": 0,
@@ -35,7 +35,14 @@ sensogram_quality_criteria = {
 
 class CreoptixCycle:
     def __init__(
-        self, dataset, type, cycle_num, guid, t_injection=25., t_dissociation=60., t_baseline=45.
+        self,
+        dataset,
+        type,
+        cycle_num,
+        guid,
+        t_injection=25.0,
+        t_dissociation=60.0,
+        t_baseline=45.0,
     ):
         self.dataset = dataset
         self.type = type
@@ -45,7 +52,12 @@ class CreoptixCycle:
         self.t_disssociation = float(t_dissociation)
         self.t_baseline = float(t_baseline)
 
-        self.baseline_values = {"FC1" : None, "FC2" : None, "FC3" : None, "FC4" : None} # For each flow channel
+        self.baseline_values = {
+            "FC1": None,
+            "FC2": None,
+            "FC3": None,
+            "FC4": None,
+        }  # For each flow channel
 
     def calculate_baselines(self):
         if self.type == "TubingWash":
@@ -53,11 +65,11 @@ class CreoptixCycle:
             return
         for fc in self.baseline_values.keys():
             dt = CREOPTIX_TIME_STEP
-            iend = int(np.floor(self.t_baseline / dt ))
+            iend = int(np.floor(self.t_baseline / dt))
             self.baseline_values[fc] = np.mean(self.dataset[fc][0:iend])
         return
 
-    def returned_to_baseline(self,fc="FC1",epilogue_time=10.,thresh=0.1):
+    def returned_to_baseline(self, fc="FC1", epilogue_time=10.0, thresh=0.1):
         if self.type == "TubingWash":
             # No concept of baseline for TubingWash
             return False
@@ -65,17 +77,21 @@ class CreoptixCycle:
         epilogue_len = int(np.floor(epilogue_time / dt))
         epilogue_signal_avg = np.mean(self.dataset[fc][-epilogue_len:])
         # print(epilogue_signal_avg,"  vs  ",self.baseline_values[fc])
-        rel_delta = (epilogue_signal_avg - self.baseline_values[fc]) / self.baseline_values[fc]
-        allowed_baseline_change = thresh # fraction of original baseline
+        rel_delta = (
+            epilogue_signal_avg - self.baseline_values[fc]
+        ) / self.baseline_values[fc]
+        allowed_baseline_change = thresh  # fraction of original baseline
         if np.abs(rel_delta) > allowed_baseline_change:
             return False
         else:
             return True
 
+
 def read_project_xml(pathstr):
     path_to_file = pathlib.Path(pathstr)
     xml_tree = ET.parse(path_to_file)
     return xml_tree
+
 
 def get_h5_data_for_guid(h5_file, guid):
     datasets = [h5_file[guid + "." + str(n)] for n in range(0, 15)]
@@ -95,7 +111,9 @@ def plot_sensogram(cycle, blank_cycle=None, diff=True, labels=None, name=None):
     ydata1 = cycle.dataset["FC1"][:]
     ydata2 = cycle.dataset["FC2"][:]
 
-    window = min(len(ydata1),len(ydata2),len(blank_cycle.dataset["FC1"]))  # get shorter length, assume start at 0
+    window = min(
+        len(ydata1), len(ydata2), len(blank_cycle.dataset["FC1"])
+    )  # get shorter length, assume start at 0
     if blank_cycle:
         ydata1 = ydata1[:window] - blank_cycle.dataset["FC1"][:window]
         ydata2 = ydata2[:window] - blank_cycle.dataset["FC2"][:window]
@@ -107,10 +125,10 @@ def plot_sensogram(cycle, blank_cycle=None, diff=True, labels=None, name=None):
         ax1.scatter(tdata, ydata1, label="Cycle ID: " + str(cycle.cycle_num) + " FC1")
         ax1.scatter(tdata, ydata2, label="Cycle ID: " + str(cycle.cycle_num) + " FC2")
 
-    quality = classify_sensogram(cycle.cycle_num,cycle.dataset)
+    quality = classify_sensogram(cycle.cycle_num, cycle.dataset)
 
     # these are matplotlib.patch.Patch properties
-    color={"Good": "palegreen", "Bad": "lightcoral"}
+    color = {"Good": "palegreen", "Bad": "lightcoral"}
     props = dict(boxstyle="round", facecolor=color[quality], alpha=0.5)
     ax1.text(
         0.05,
@@ -130,8 +148,8 @@ def plot_sensogram(cycle, blank_cycle=None, diff=True, labels=None, name=None):
     return
 
 
-def classify_sensogram(cycle_id,dataset,channelA="FC1",channelB="FC2",name=None):
-    rtb = my_cycles[cycle_id-1].returned_to_baseline()
+def classify_sensogram(cycle_id, dataset, channelA="FC1", channelB="FC2", name=None):
+    rtb = my_cycles[cycle_id - 1].returned_to_baseline()
     if rtb:
         return "Good"
     else:
@@ -169,7 +187,8 @@ def classify_sensogram(cycle_id,dataset,channelA="FC1",channelB="FC2",name=None)
 # #plt.plot(nparray[cwt_peaks,-2], nparray[cwt_peaks,-1], "o", color="red")
 # plt.show()
 
-def ingest_project_data(xml_path,h5_path):
+
+def ingest_project_data(xml_path, h5_path):
     cycles = []
     xml = read_project_xml(xml_path)
     root = xml.getroot()
@@ -188,11 +207,12 @@ def ingest_project_data(xml_path,h5_path):
             dissociation = cycle.find("TimeAfterInjection").text
             baseline = cycle.find("BaselineDuration").text
 
-            
             dataset = get_h5_data_for_guid(h5_file, guid)
-            data_to_keep = ["Time","FC1","FC2","FC3","FC4"]
+            data_to_keep = ["Time", "FC1", "FC2", "FC3", "FC4"]
             # cols_to_keep = [HDF5_CYCLE_DSET_COLS[lab] for lab in data_labels]
-            cycle_data = { lab : dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep }
+            cycle_data = {
+                lab: dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep
+            }
 
             cycles.append(
                 CreoptixCycle(
@@ -206,9 +226,11 @@ def ingest_project_data(xml_path,h5_path):
                 )
             )
     return cycles
+
+
 xml_path = pathlib.Path("data/example/_project.cx3")
 h5_path = pathlib.Path("data/example/cyclesData.h5")
-my_cycles = ingest_project_data(xml_path,h5_path)
+my_cycles = ingest_project_data(xml_path, h5_path)
 print(my_cycles[0].dataset)
 
 
@@ -242,22 +264,25 @@ print(my_cycles[0].dataset)
 
 for cyc in my_cycles:
     cyc.calculate_baselines()
-    print(cyc.cycle_num," returned to baseline?  ",cyc.returned_to_baseline())
-    most_recent_blank = max([int(c.cycle_num) for c in my_cycles[0:cyc.cycle_num] if c.type == "Blank"], default=None)
+    print(cyc.cycle_num, " returned to baseline?  ", cyc.returned_to_baseline())
+    most_recent_blank = max(
+        [int(c.cycle_num) for c in my_cycles[0 : cyc.cycle_num] if c.type == "Blank"],
+        default=None,
+    )
     if most_recent_blank:
         # my_cycles indexed from 0 but cycle_num indexed from 1
-        blank_cycle = my_cycles[most_recent_blank-1]
+        blank_cycle = my_cycles[most_recent_blank - 1]
     else:
         blank_cycle = None
-    print(cyc.cycle_num,"has Most recent blank :",most_recent_blank)
+    print(cyc.cycle_num, "has Most recent blank :", most_recent_blank)
     if cyc.type != "Sample":
-        continue # don't plot
+        continue  # don't plot
     plot_sensogram(
         cyc,
         name=cyc.type.replace(" ", "_").strip("."),
         # blank_dataset = None,
-        blank_cycle = blank_cycle,
-        diff=False
+        blank_cycle=blank_cycle,
+        diff=False,
     )
 
 exit()
@@ -299,6 +324,4 @@ with h5py.File(path_to_file, "r") as h5_file:
 
     example_dsets_to_plot = example_dsets_to_print[0:10]
     for d, dset in enumerate(example_dsets_to_plot):
-
-
         plot_sensogram(dataset, sampleid=d, name="Test2")
