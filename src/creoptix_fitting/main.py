@@ -86,6 +86,32 @@ class CreoptixCycle:
         else:
             return True
 
+    def has_flat_tail(self, fc="FC1", epilogue_time=20.0, slope_thresh=0.02):
+        if self.type == "TubingWash":
+            # No concept of baseline for TubingWash
+            return False
+        dt = CREOPTIX_TIME_STEP
+        # # simple measure of slope between epilogue start and end points
+        it1 = int(np.floor(epilogue_time / dt))
+        it2 = -1
+        # epilogue_dy = (self.dataset[fc][it2] - self.dataset[fc][it1])  # should be -ve or 0
+        # # is epilogue_dx useful?
+        # epilogue_rel_slope = epilogue_dy/self.dataset[fc][it1]
+        # # Linear regression
+        lin_reg = scipy.stats.linregress(
+            self.dataset["Time"][it1:], self.dataset[fc][it1:]
+        )
+        print("LIN_REG slope", lin_reg.slope)
+        if -slope_thresh < lin_reg.slope < slope_thresh:
+            return True
+        else:
+            return False
+
+    def find_peaks_and_troughs(self, fc="FC1"):
+        peaks, peak_props = scipy.signal.find_peaks(self.dataset[fc], prominence=1)
+        # cwt_peaks = scipy.signal.find_peaks_cwt(nparray[:,-1],np.arange(1,50))
+        return peaks, peak_props
+
 
 def read_project_xml(pathstr):
     path_to_file = pathlib.Path(pathstr)
@@ -107,9 +133,9 @@ def get_signal_tail_mean(df, end_fraction=0.1):
 def plot_sensogram(cycle, blank_cycle=None, diff=True, labels=None, name=None):
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
-    tdata = cycle.dataset["Time"][:]
-    ydata1 = cycle.dataset["FC1"][:]
-    ydata2 = cycle.dataset["FC2"][:]
+    tdata = cycle.dataset["Time"]
+    ydata1 = cycle.dataset["FC1"]
+    ydata2 = cycle.dataset["FC2"]
 
     window = min(
         len(ydata1), len(ydata2), len(blank_cycle.dataset["FC1"])
@@ -120,12 +146,20 @@ def plot_sensogram(cycle, blank_cycle=None, diff=True, labels=None, name=None):
         tdata = tdata[:window]
 
     if diff:
-        ax1.scatter(tdata, ydata2 - ydata1, label="Cycle ID: " + str(cycle.cycle_num))
+        ax1.plot(tdata, ydata2 - ydata1, label="Cycle ID: " + str(cycle.cycle_num))
     else:
-        ax1.scatter(tdata, ydata1, label="Cycle ID: " + str(cycle.cycle_num) + " FC1")
-        ax1.scatter(tdata, ydata2, label="Cycle ID: " + str(cycle.cycle_num) + " FC2")
+        ax1.plot(tdata, ydata1, label="Cycle ID: " + str(cycle.cycle_num) + " FC1")
+        ax1.plot(tdata, ydata2, label="Cycle ID: " + str(cycle.cycle_num) + " FC2")
+    peak_data1, _ = cycle.find_peaks_and_troughs(fc="FC1")
+    peak_data2, _ = cycle.find_peaks_and_troughs(fc="FC2")
+    print(peak_data1)
+    ax1.scatter(tdata[peak_data1], ydata1[peak_data1], marker="o", color="red")
+    ax1.scatter(tdata[peak_data2], ydata2[peak_data2], marker="o", color="green")
 
-    quality = classify_sensogram(cycle.cycle_num, cycle.dataset)
+    rtb, flat_tail = classify_sensogram(cycle.cycle_num, cycle.dataset)
+    quality = "Good" if rtb and flat_tail else "Bad"
+
+    quality_text = f"{quality} \n Baseline? {rtb} \n Flat tail? {flat_tail}"
 
     # these are matplotlib.patch.Patch properties
     color = {"Good": "palegreen", "Bad": "lightcoral"}
@@ -133,7 +167,7 @@ def plot_sensogram(cycle, blank_cycle=None, diff=True, labels=None, name=None):
     ax1.text(
         0.05,
         0.95,
-        quality,
+        quality_text,
         transform=ax1.transAxes,
         fontsize=14,
         verticalalignment="top",
@@ -150,32 +184,9 @@ def plot_sensogram(cycle, blank_cycle=None, diff=True, labels=None, name=None):
 
 def classify_sensogram(cycle_id, dataset, channelA="FC1", channelB="FC2", name=None):
     rtb = my_cycles[cycle_id - 1].returned_to_baseline()
-    if rtb:
-        return "Good"
-    else:
-        return "Bad"
+    flat_tail = my_cycles[cycle_id - 1].has_flat_tail()
+    return rtb, flat_tail
 
-
-#
-# good_fit_data = pd.read_excel(
-#     pathlib.Path("data/good_fit_data.xlsx"), sheet_name="adjusted sample sensogram"
-# )
-# okay_fit_data = pd.read_excel(
-#     pathlib.Path("data/okay_fit_data.xlsx"), sheet_name="adjusted sample sensogram"
-# )
-# bad_fit_data = pd.read_excel(
-#     pathlib.Path("data/bad_fit_data.xlsx"), sheet_name="adjusted sample sensogram"
-# )
-# print(good_fit_data.head())
-
-# data_to_plot=good_fit_data
-
-# signal_tail_mean = get_signal_tail_mean(data_to_plot)
-# print("Mean of tail:  ",signal_tail_mean)
-# zero_thresh = 0.05
-# print("    so final dissoc complete?  ",bool(signal_tail_mean <= zero_thresh))
-# plt.figure()
-# plt.plot(data_to_plot.iloc[:,-2],data_to_plot.iloc[:,-1],".")
 
 # nparray = data_to_plot.to_numpy()
 # dRbydt = np.gradient(nparray[:,-1],nparray[:,-2])
@@ -262,9 +273,10 @@ print(my_cycles[0].dataset)
 #             )
 #         )
 
-for cyc in my_cycles:
+for cyc in my_cycles[0:30]:
     cyc.calculate_baselines()
     print(cyc.cycle_num, " returned to baseline?  ", cyc.returned_to_baseline())
+    print(cyc.cycle_num, " has flat tail?  ", cyc.has_flat_tail())
     most_recent_blank = max(
         [int(c.cycle_num) for c in my_cycles[0 : cyc.cycle_num] if c.type == "Blank"],
         default=None,
