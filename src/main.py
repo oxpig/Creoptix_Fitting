@@ -2,10 +2,9 @@ import numpy as np
 import scipy
 import pathlib
 import matplotlib.pyplot as plt
+import time
 
-# import h5py  # pandas HDF5 support is limited to specific structures -- need h5py
 from creoptix_tools.data_io import ingest_project_data
-
 
 def plot_sensogram(
     cycle, correct_for_blank=False, blank_cycle=None, diff=True, labels=None, name=None
@@ -19,8 +18,11 @@ def plot_sensogram(
         dataset = cycle.dataset
         blank_dataset = blank_cycle.dataset
     fig = plt.figure()
-    ax1 = fig.add_subplot(2, 1, 1)
-    ax2 = fig.add_subplot(2, 1, 2, sharex=ax1)
+    if diff:
+        ax1 = fig.add_subplot(2, 1, 1)
+        ax2 = fig.add_subplot(2, 1, 2, sharex=ax1)
+    else:
+        ax1 = fig.add_subplot(1, 1, 1)
     # assuming two relevant flow channels are 1 and 2
     tdata = dataset["Time"]
     ydata1 = dataset["FC1"]
@@ -34,7 +36,6 @@ def plot_sensogram(
         ydata2 = ydata2[:window] - blank_dataset["FC2"][:window]
         tdata = tdata[:window]
 
-    print("tdata=", tdata)
     ax1.plot(tdata, ydata1, label="Cycle ID: " + str(cycle.cycle_num) + " FC1")
     ax1.plot(tdata, ydata2, label="Cycle ID: " + str(cycle.cycle_num) + " FC2")
     peak_data1, _ = scipy.signal.find_peaks(ydata1, prominence=1)
@@ -57,38 +58,38 @@ def plot_sensogram(
         ax2.plot(
             tdata,
             ydata2 - ydata1,
-            label="Cycle ID: " + str(cycle.cycle_num) + " FC2-1",
+            label="Cycle ID: " + str(cycle.cycle_num) + " FC(2-1)",
             color="black",
         )
 
-    rtb, flat_tail = classify_sensogram(cycle.cycle_num, cycle.dataset)
+    rtb, flat_tail = classify_sensogram(cycle)
     quality = "Good" if rtb[0] and flat_tail[0] else "Bad"
-    print("RTB delta", rtb[1])
 
     quality_text = f"{quality} \n Baseline? {rtb[0]} \n Flat tail? {flat_tail[0]}"
-    # Plot lin reg of tails
-    LR_result = scipy.stats.linregress(tdata[-200:], ydata1[-200:])
-    ax1.plot(
+    # Plot lin reg of tail for FC(2-1)
+    LR_result = scipy.stats.linregress(tdata[-200:], ydata2[-200:]-ydata1[-200:])
+    ax2.plot(
         tdata[-200:],
         LR_result.intercept + LR_result.slope * tdata[-200:],
-        color="black",
+        color="magenta",
         linestyle="--",
     )
 
     # these are matplotlib.patch.Patch properties
     color = {"Good": "palegreen", "Bad": "lightcoral"}
     props = dict(boxstyle="round", facecolor=color[quality], alpha=0.5)
-    ax1.text(
-        0.05,
-        0.95,
-        quality_text,
-        transform=ax1.transAxes,
-        fontsize=14,
-        verticalalignment="top",
-        bbox=props,
-    )
+    # ax1.text(
+    #     0.05,
+    #     0.95,
+    #     quality_text,
+    #     transform=ax1.transAxes,
+    #     fontsize=14,
+    #     verticalalignment="top",
+    #     bbox=props,
+    # )
 
     ax1.legend()
+    ax2.legend()
     plotfile = f"cycle{cycle.cycle_num}_{name}.png"
     fig.suptitle(f"cycle{cycle.cycle_num}_{name}")
     fig.savefig(plotfile, bbox_inches="tight")
@@ -96,9 +97,9 @@ def plot_sensogram(
     return
 
 
-def classify_sensogram(cycle_id, dataset, channelA="FC1", channelB="FC2", name=None):
-    rtb = my_cycles[cycle_id - 1].returned_to_baseline()
-    flat_tail = my_cycles[cycle_id - 1].has_flat_tail()
+def classify_sensogram(cycle, channelA="FC1", channelB="FC2", name=None):
+    rtb = cycle.returned_to_baseline()
+    flat_tail = cycle.has_flat_tail()
     return rtb, flat_tail
 
 
@@ -115,33 +116,37 @@ def classify_sensogram(cycle_id, dataset, channelA="FC1", channelB="FC2", name=N
 
 xml_path = pathlib.Path("data/example/_project.cx3")
 h5_path = pathlib.Path("data/example/cyclesData.h5")
-my_cycles = ingest_project_data(xml_path, h5_path)
-print(my_cycles[0].dataset)
+cycles_data = ingest_project_data(xml_path, h5_path)
 
-for cyc in my_cycles[0:30]:
+cycles_data = cycles_data[0:50]  # CRT DEBUG
+
+t_start = time.time()
+
+for cyc in cycles_data:
     cyc.calculate_baselines()
-    print(cyc.cycle_num, " returned to baseline?  ", cyc.returned_to_baseline())
-    print(cyc.cycle_num, " has flat tail?  ", cyc.has_flat_tail())
     cyc.apply_corrections()
-    most_recent_blank = max(
-        [int(c.cycle_num) for c in my_cycles[0 : cyc.cycle_num] if c.type == "Blank"],
-        default=None,
-    )
-    if most_recent_blank:
-        # my_cycles indexed from 0 but cycle_num indexed from 1
-        blank_cycle = my_cycles[most_recent_blank - 1]
-    else:
-        blank_cycle = None
-    print(cyc.cycle_num, "has Most recent blank :", most_recent_blank)
+    most_recent_blank = cyc.get_most_recent_blank(cycles_data)
+    # if last_blank:
+    #     # cycles_data indexed from 0 but cycle_num indexed from 1
+    #     blank_cycle = cycles_data[most_recent_blank - 1]
+    # else:
+    #     blank_cycle = None
+
+    # print(cyc.cycle_num, " returned to baseline?  ", cyc.returned_to_baseline())
+    # print(cyc.cycle_num, " has flat tail?  ", cyc.has_flat_tail())
     if cyc.type in ["Startup", "DMSO Cal.", "TubingWash"]:
         continue  # don't plot
     plot_sensogram(
         cyc,
         name=cyc.type.replace(" ", "_").strip("."),
         correct_for_blank=True,
-        blank_cycle=blank_cycle,
+        blank_cycle=most_recent_blank,
         diff=True,
     )
+
+t_end = time.time()
+
+print(f"Plotted sensograms for {len([c for c in cycles_data if c.type in ["Blank","Sample","ControlSample"]])} cycles in {t_end-t_start} seconds.")
 
 exit()
 # # plt.legend(loc='upper left')

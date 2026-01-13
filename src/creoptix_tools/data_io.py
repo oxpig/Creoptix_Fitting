@@ -7,6 +7,8 @@ import copy
 
 CREOPTIX_TIME_STEP = 0.1  # timestep seems to be fixed by Creoptix
 
+CREOPTIX_TIME_TO_LOAD_CHIP = 1.4  # seconds
+
 HDF5_CYCLE_DSET_COLS = {
     "Time": 0,
     "TLD Temp": 1,
@@ -70,6 +72,15 @@ class CreoptixCycle:
             "FC3": None,
             "FC4": None,
         }  # For each flow channel
+    
+    def get_most_recent_blank(self,cycles_data):
+        # cycle_num starts from 1, so these bounds will get all blanks up to
+        # and including self as cycles_data starts from 0
+        blanks = [c for c in cycles_data[0 : self.cycle_num] if c.type == "Blank"]
+        if not blanks:
+            return None
+        else:
+            return blanks[-1]
 
     def apply_corrections(self, yofftime=40.0, yavgwindow=2.0):
         self.adjusted_dataset = copy.deepcopy(self.dataset)
@@ -118,7 +129,6 @@ class CreoptixCycle:
         dt = CREOPTIX_TIME_STEP
         epilogue_len = int(np.floor(epilogue_time / dt))
         epilogue_signal_avg = np.mean(self.dataset[fc][-epilogue_len:])
-        print(epilogue_signal_avg, "  vs  ", self.baseline_values[fc])
         rel_delta = (
             epilogue_signal_avg - self.baseline_values[fc]
         ) / self.baseline_values[fc]
@@ -143,7 +153,6 @@ class CreoptixCycle:
         lin_reg = scipy.stats.linregress(
             self.dataset["Time"][it1:], self.dataset[fc][it1:]
         )
-        print("LIN_REG slope", lin_reg.slope)
         if -slope_thresh < lin_reg.slope < slope_thresh:
             return True, lin_reg
         else:
