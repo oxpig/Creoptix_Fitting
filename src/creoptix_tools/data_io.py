@@ -72,8 +72,8 @@ class CreoptixCycle:
             "FC3": None,
             "FC4": None,
         }  # For each flow channel
-    
-    def get_most_recent_blank(self,cycles_data):
+
+    def get_most_recent_blank(self, cycles_data):
         # cycle_num starts from 1, so these bounds will get all blanks up to
         # and including self as cycles_data starts from 0
         blanks = [c for c in cycles_data[0 : self.cycle_num] if c.type == "Blank"]
@@ -84,7 +84,6 @@ class CreoptixCycle:
 
     def apply_corrections(self, yofftime=40.0, yavgwindow=2.0):
         self.adjusted_dataset = copy.deepcopy(self.dataset)
-
         # zero to value at t=0
         fcs = ["FC1", "FC2", "FC3", "FC4"]
         for fc in fcs:
@@ -139,17 +138,14 @@ class CreoptixCycle:
             return True, rel_delta
 
     def has_flat_tail(self, fc="FC1", epilogue_time=20.0, slope_thresh=0.02):
+        """Fits a linear-regression line of best fit to epilogue of sensogram to determine if tail is flat"""
         if self.type == "TubingWash":
             # No concept of baseline for TubingWash
             return False
         dt = CREOPTIX_TIME_STEP
         # # simple measure of slope between epilogue start and end points
         it1 = int(np.floor(epilogue_time / dt))
-        it2 = -1
-        # epilogue_dy = (self.dataset[fc][it2] - self.dataset[fc][it1])  # should be -ve or 0
-        # # is epilogue_dx useful?
-        # epilogue_rel_slope = epilogue_dy/self.dataset[fc][it1]
-        # # Linear regression
+
         lin_reg = scipy.stats.linregress(
             self.dataset["Time"][it1:], self.dataset[fc][it1:]
         )
@@ -177,7 +173,6 @@ def ingest_project_data(xml_path, h5_path):
             pulse_serie = serie
             break
     serie_cycles = pulse_serie.iter("Cycle")  # iterator
-    sample_idx_to_guid = {}
     with h5py.File(h5_path, "r") as h5_file:
         for cycle in serie_cycles:
             cycle_type = cycle.find("CycleType").text
