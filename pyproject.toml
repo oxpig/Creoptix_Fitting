@@ -3,7 +3,7 @@ requires = ["uv_build>=0.8.7,<0.10.0"]
 build-backend = "uv_build"
 
 [project]
-name = "creoptix-fitting"
+name = "creoptix-tools"
 version = "0.1.8"
 description = "Tools for fitting to the sensograms created by Creoptix runs."
 readme = "README.md"
@@ -19,4 +19,5 @@ dependencies = [
     "scipy",
     "ruff>=0.14.1",
     "h5py",
+    "datetime>=6.0",
 ]

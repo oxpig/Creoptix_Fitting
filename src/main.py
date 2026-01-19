@@ -1,5 +1,5 @@
 import numpy as np
-import scipy
+import pandas as pd
 import pathlib
 import matplotlib.pyplot as plt
 import time
@@ -20,16 +20,19 @@ from creoptix_tools.plotting import plot_sensogram
 
 today = datetime.datetime.now()
 project_name = "_".join(["TestProject", today.strftime("%Y-%m-%d")])
-xml_path = pathlib.Path("data/example/_project.cx3")
-h5_path = pathlib.Path("data/example/cyclesData.h5")
+data_dir = pathlib.Path("C:/Users/stat0524-admin/Creoptix_Fitting/data/example/")
+xml_path = pathlib.Path(data_dir / "_project.cx3")
+h5_path = pathlib.Path(data_dir / "cyclesData.h5")
 cycles_data = ingest_project_data(xml_path, h5_path)
 
-# cycles_data = cycles_data[0:50]  # CRT DEBUG
+# cycles_data = cycles_data[0:30]  # CRT DEBUG
 
 t_start = time.time()
 
 results_path = pathlib.Path("results_" + project_name)
 results_path.mkdir(exist_ok=True)
+
+cycle_binding_type = {}
 
 for cyc in cycles_data:
     cyc.calculate_baselines()
@@ -46,65 +49,44 @@ for cyc in cycles_data:
     if cyc.type in ["Startup", "DMSO Cal.", "TubingWash"]:
         continue  # don't plot
     elif cyc.type == "Blank":
-        plot_sensogram(
+        _ = plot_sensogram(
             cyc,
             name=cyc.type.replace(" ", "_").strip("."),
             diff=True,
             directory=results_path,
         )
     else:
-        pass
-        plot_sensogram(
+        binding_type = plot_sensogram(
             cyc,
             name=cyc.type.replace(" ", "_").strip("."),
             correct_for_blank=most_recent_blank,
             diff=True,
             directory=results_path,
         )
+        cycle_binding_type[cyc.cycle_num] = binding_type
+
 
 t_end = time.time()
 
-print(
-    f"Plotted sensograms for {len([c for c in cycles_data if c.type in ['Blank', 'Sample', 'ControlSample']])} cycles in {t_end - t_start} seconds."
+n_samples = [c for c in cycles_data if c.type in ["Blank", "Sample", "ControlSample"]]
+print(f"Plotted sensograms for {len(n_samples)} cycles in {t_end - t_start} seconds.")
+
+# Create a summary table of binding type for each cycle
+result_df = pd.DataFrame(
+    [
+        [i, cycles_data[i - 1].type, cycle_binding_type[i]]
+        for i in cycle_binding_type.keys()
+    ]
+)
+result_df.to_csv(
+    pathlib.Path(results_path / "binding_table.csv"),
+    header=["CycleID", "CycleType", "BindingType"],
+    index=False,
 )
 
+print(f"Of {len(n_samples)} samples:")
+for bind_type in set(cycle_binding_type.values()):
+    cases = [i for i in cycle_binding_type.keys() if cycle_binding_type[i] == bind_type]
+    print(f"    {bind_type} : {len(cases)}")
+print(f"See binding_table.csv alongside sensogram plots for more details.")
 exit()
-# # plt.legend(loc='upper left')
-# # plt.show()
-
-# example_sample_idxs = {
-#     1: "Startup",
-#     11: "DMSO_Calib",
-#     12: "Blank",
-#     15: "Sample",
-# }
-
-# cycles = pulse_serie.iter("Cycle")  # iterator
-# sample_idx_to_guid = {}
-# for cycle in cycles:
-#     if int(cycle.find("Index").text) in example_sample_idxs:
-#         idx = cycle.find("Index").text
-#         guid = cycle.find("Guid").text
-#         print(f"Sample: Index: {idx}, GUID: {guid}")
-#         sample_idx_to_guid[idx] = guid
-
-# with h5py.File(path_to_file, "r") as h5_file:
-#     example_dsets_to_print = [
-#         get_h5_data_for_guid(h5_file, guid) for guid in sample_idx_to_guid.values()
-#     ]
-
-#     data_labels = HDF5_CYCLE_DSET_COLS.keys()
-#     pd.options.display.float_format = "{:.3f}".format
-#     for isample in example_sample_idxs:
-#         dset = get_h5_data_for_guid(h5_file, sample_idx_to_guid[str(isample)])
-#         df = pd.DataFrame(
-#             [dset[n][:] for n in range(0, 15)], index=data_labels
-#         ).transpose()
-#         df.style.format(precision=3)
-#         # df.to_csv("cycle_"+str(isample)+"_"+example_sample_idxs[isample]+"_raw_data.csv")
-#         print(df)
-#     # print([dset[n][0] for n in range(0,15)])
-
-#     example_dsets_to_plot = example_dsets_to_print[0:10]
-#     for d, dset in enumerate(example_dsets_to_plot):
-#         plot_sensogram(dataset, sampleid=d, name="Test2")

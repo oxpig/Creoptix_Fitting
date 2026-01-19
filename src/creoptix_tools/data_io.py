@@ -137,22 +137,17 @@ class CreoptixCycle:
         else:
             return True, rel_delta
 
-    def has_flat_tail(self, fc="FC1", epilogue_time=20.0, slope_thresh=0.02):
+    def tail_linreg(self, fc="FC1", epilogue_time=20.0):
         """Fits a linear-regression line of best fit to epilogue of sensogram to determine if tail is flat"""
         if self.type == "TubingWash":
             # No concept of baseline for TubingWash
             return False
         dt = CREOPTIX_TIME_STEP
-        # # simple measure of slope between epilogue start and end points
         it1 = int(np.floor(epilogue_time / dt))
-
         lin_reg = scipy.stats.linregress(
-            self.dataset["Time"][it1:], self.dataset[fc][it1:]
+            self.adjusted_dataset["Time"][it1:], self.adjusted_dataset[fc][it1:]
         )
-        if -slope_thresh < lin_reg.slope < slope_thresh:
-            return True, lin_reg
-        else:
-            return False, lin_reg
+        return lin_reg
 
     # This needs updating to work with a window (i.e. slice) of dataset
     def find_peaks_and_troughs(
