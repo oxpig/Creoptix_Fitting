@@ -1,6 +1,5 @@
 import scipy
 import matplotlib.pyplot as plt
-import numpy as np
 import pathlib
 
 
@@ -37,6 +36,7 @@ def plot_sensogram(
         ydata1 = ydata1[:window] - blank_dataset["FC1"][:window]
         ydata2 = ydata2[:window] - blank_dataset["FC2"][:window]
         tdata = tdata[:window]
+        plt.close(fig)
         fig = plt.figure(layout="constrained")
         ax1 = fig.add_subplot(3, 1, 1)
         ax2 = fig.add_subplot(3, 1, 2, sharex=ax1)
@@ -130,7 +130,7 @@ def plot_sensogram(
     plotfile = f"cycle{cycle.cycle_num}_{name}.png"
     fig.suptitle(f"cycle{cycle.cycle_num}_{name}")
     fig.savefig(pathlib.Path(directory / plotfile), bbox_inches="tight")
-    plt.close()
+    plt.close(fig)
     return binding_type
 
 
