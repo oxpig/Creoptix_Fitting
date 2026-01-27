@@ -36,6 +36,15 @@ quality_criteria = {
 
 def read_project_xml(pathstr):
     path_to_file = pathlib.Path(pathstr)
+    # Remove specified encoding as this causes problems with ElementTree
+    with open(path_to_file,"r") as f:
+        lines = f.readlines()
+    enc_string = ' encoding="utf-16"'
+    if enc_string in lines[0]:
+        lines[0] = lines[0].replace(enc_string,"")
+        with open(path_to_file,"w") as f:
+            for line in lines:
+                f.write(line)
     xml_tree = ET.parse(path_to_file)
     return xml_tree
 
