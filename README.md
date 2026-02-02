@@ -7,8 +7,8 @@ The following assumes installation on a NoMachine VM:
 
 2. [_only necessary first time or when code is updated_] Pull the latest copy of Creoptix_Fitting from the GitHub: \
    https://github.com/oxpig/Creoptix_Fitting
-   - If doing this by downloading a ZIP, extract the code to the appropriate directory on the NoMachine (should be something like\
-   - `/users/<username>/Creoptix_Fitting-main/`)
+   - If doing this by downloading a ZIP, extract the code to the appropriate directory on the NoMachine (should be something like \
+   `/users/<username>/Creoptix_Fitting-main/`)
 
 **The following steps need to be run within the directory (folder) where Creoptix_Fitting is located**, i.e. the folder containing the pyproject.toml file.
 
@@ -26,3 +26,4 @@ then the path must be given in the notebook as `/users/<username>/20260202`.  If
 
 ## Known Issues
 A Creoptix project file containing more than one experimental "run" cannot be processed at present -- use Creoptix WaveControl to save the desired data as a separate project.
+
