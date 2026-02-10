@@ -1,22 +1,64 @@
 import pandas as pd
 import pathlib
+import zipfile
 import time
 import datetime
+import os
 from creoptix_tools.data_io import ingest_project_data
 from creoptix_tools.plotting import plot_sensogram
 
 
-def perform_creoptix_fitting(project_name=None, data_dir=None, results_name=None):
-    t_start = time.time()
+def setup_directories(
+    creoptix_zipfile,
+    project_name="TestProject",
+    data_dir="UnzippedData",
+    results_dir="PlottingResults",
+):
     today = datetime.datetime.now()
-
     project_name = "_".join([project_name, today.strftime("%Y-%m-%d")])
-    data_path = pathlib.Path(data_dir)
+
+    parent_path = pathlib.Path(creoptix_zipfile).parents[0]
+
+    data_path = pathlib.Path(parent_path / (data_dir + "_" + project_name))
+    data_path.mkdir(exist_ok=True)
+
+    results_path = pathlib.Path(parent_path / (results_dir + "_" + project_name))
+    results_path.mkdir(exist_ok=True)
+    return data_path, results_path
+
+
+def unzip_data(creoptix_zipfile, data_path):
+    zf_obj = zipfile.ZipFile(creoptix_zipfile)
+    members = ["cyclesData.h5", "_project.cx3"]
+    zf_obj.extractall(members=members, path=data_path)
+    return
+
+
+def remove_working_files(data_path, filenames=["_project.cx3", "cyclesData.h5"]):
+    for f in filenames:
+        os.remove(pathlib.Path(data_path, f))
+    os.rmdir(data_path)
+    return
+
+
+def perform_creoptix_fitting(
+    creoptix_zipfile,
+    project_name="TestProject",
+    data_dir="UnzippedData",
+    results_dir="PlottingResults",
+):
+    t_start = time.time()
+
+    data_path, results_path = setup_directories(
+        creoptix_zipfile=creoptix_zipfile,
+        project_name=project_name,
+        data_dir=data_dir,
+        results_dir=results_dir,
+    )
+    unzip_data(creoptix_zipfile=creoptix_zipfile, data_path=data_path)
     xml_path = pathlib.Path(data_path / "_project.cx3")
     h5_path = pathlib.Path(data_path / "cyclesData.h5")
     cycles_data = ingest_project_data(xml_path, h5_path)
-    results_path = pathlib.Path(data_path / results_name)
-    results_path.mkdir(exist_ok=True)
 
     cycle_binding_type = {}
     for cyc in cycles_data:
@@ -85,13 +127,19 @@ def perform_creoptix_fitting(project_name=None, data_dir=None, results_name=None
     ]
     for i in binding_cycles:
         print(f"    {i:5d}")
+    print("Removing temporary data files...")
+    remove_working_files(data_path=data_path)
     return cycle_binding_type
 
 
-if __name__ == "__main__":
+def main():
     project_name = "TestProject"
     data_dir = "C:/Users/stat0524-admin/Creoptix_Fitting/data/example/"
     results_name = "PlottingResults"
     perform_creoptix_fitting(
         project_name=project_name, data_dir=data_dir, results_name=results_name
     )
+
+
+if __name__ == "__main__":
+    main()
