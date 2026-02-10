@@ -1,5 +1,4 @@
-data/example/
-data/*.cxw
+data/*
 *.png
 src/build/*
 src/dist/*
