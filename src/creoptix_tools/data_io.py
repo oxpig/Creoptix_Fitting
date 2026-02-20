@@ -6,7 +6,6 @@ import h5py  # pandas HDF5 support is limited to specific structures -- need h5p
 import copy
 
 CREOPTIX_TIME_STEP = 0.1  # timestep seems to be fixed by Creoptix
-
 CREOPTIX_TIME_TO_LOAD_CHIP = 1.4  # seconds
 
 HDF5_CYCLE_DSET_COLS = {
@@ -27,11 +26,21 @@ HDF5_CYCLE_DSET_COLS = {
     "FC4_amp": 14,
 }
 
+CREOPTIX_SAMPLE_TYPES = [
+    "Startup",
+    "Sample",
+    "ControlSample",
+    "Blank",
+    "DMSO Cal.",
+    "TubingWash"
+]
+
 quality_criteria = {
     "blank_trough_depth": 0,  # pg/mm^2
     "blank_tail_height": 0,  # pg/mm^2
     "relative_response_peak_height": 5,  # pg/mm^2
 }
+
 
 
 def read_project_xml(pathstr):
@@ -65,6 +74,7 @@ class CreoptixCycle:
         t_dissociation=60.0,
         t_baseline=45.0,
         adjusted_dataset=None,
+        reagent=None
     ):
         self.dataset = dataset
         self.type = type
@@ -74,6 +84,7 @@ class CreoptixCycle:
         self.t_disssociation = float(t_dissociation)
         self.t_baseline = float(t_baseline)
         self.adjusted_dataset = adjusted_dataset
+        self.reagent=reagent
 
         self.baseline_values = {
             "FC1": None,
@@ -82,14 +93,28 @@ class CreoptixCycle:
             "FC4": None,
         }  # For each flow channel
 
-    def get_most_recent_blank(self, cycles_data):
-        # cycle_num starts from 1, so these bounds will get all blanks up to
-        # and including self as cycles_data starts from 0
-        blanks = [c for c in cycles_data[0 : self.cycle_num] if c.type == "Blank"]
-        if not blanks:
+        if self.reagent and self.type == "Sample":
+            rgnt_conc_value, rgnt_conc_unit = self.reagent["Concentration"].split()
+            if rgnt_conc_unit[0] == "n":  # nanomoles
+                mag = -9
+            elif rgnt_conc_unit[0] == "μ":   # micromoles
+                mag = -6
+            else:
+                raise Exception(f"Unknown unit for reagent concentration: {rgnt_conc_unit}")
+            self.reagent["Conc_Value"] = float(rgnt_conc_value) * 10.0**mag
+            print(f"Normalised concentration: {self.reagent["Conc_Value"]}")
+            
+
+    def get_most_recent_sample_of_type(self, cycles_data, sample_type=None):
+        if sample_type not in CREOPTIX_SAMPLE_TYPES:
+            raise Exception(f"Unexpected most recent sample type requested ({sample_type}).")
+        # cycle_num starts from 1, so these bounds will get all matches 
+        # up to and including self as cycles_data starts from 0
+        valids = [c for c in cycles_data[0 : self.cycle_num] if c.type == sample_type]
+        if not valids:
             return None
         else:
-            return blanks[-1]
+            return valids[-1]
 
     def apply_corrections(self, yofftime=40.0, yavgwindow=2.0):
         self.adjusted_dataset = copy.deepcopy(self.dataset)
@@ -177,6 +202,7 @@ def ingest_project_data(xml_path, h5_path):
             pulse_serie = serie
             break
     serie_cycles = pulse_serie.iter("Cycle")  # iterator
+
     with h5py.File(h5_path, "r") as h5_file:
         for cycle in serie_cycles:
             cycle_type = cycle.find("CycleType").text
@@ -185,6 +211,7 @@ def ingest_project_data(xml_path, h5_path):
             contact = cycle.find("ContactTime").text
             dissociation = cycle.find("TimeAfterInjection").text
             baseline = cycle.find("BaselineDuration").text
+            reagent_ref = cycle.find("ReagentRef")
 
             dataset = get_h5_data_for_guid(h5_file, guid)
             data_to_keep = ["Time", "FC1", "FC2", "FC3", "FC4"]
@@ -192,6 +219,12 @@ def ingest_project_data(xml_path, h5_path):
             cycle_data = {
                 lab: dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep
             }
+            # Add reagent data
+            side = reagent_ref.find("AutosamplerLocation").get("Side")
+            slot = reagent_ref.find("AutosamplerLocation").get("Slot")
+            for rgnt in pulse_serie.findall("AutosamplerVM/"+side+"Rack/Reagents/Reagent"):
+                if rgnt.attrib["Slot"] == slot:
+                    reagent_info = copy.copy(rgnt.attrib)
 
             cycles.append(
                 CreoptixCycle(
@@ -202,6 +235,7 @@ def ingest_project_data(xml_path, h5_path):
                     t_contact=float(contact),
                     t_dissociation=float(dissociation),
                     t_baseline=float(baseline),
+                    reagent=reagent_info
                 )
             )
     return cycles

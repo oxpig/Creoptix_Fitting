@@ -64,7 +64,7 @@ def perform_creoptix_fitting(
     for cyc in cycles_data:
         cyc.calculate_baselines()
         cyc.apply_corrections()
-        most_recent_blank = cyc.get_most_recent_blank(cycles_data)
+        most_recent_blank = cyc.get_most_recent_sample_of_type(cycles_data, type="Blank")
         # if last_blank:
         #     # cycles_data indexed from 0 but cycle_num indexed from 1
         #     blank_cycle = cycles_data[most_recent_blank - 1]
@@ -73,7 +73,7 @@ def perform_creoptix_fitting(
 
         # print(cyc.cycle_num, " returned to baseline?  ", cyc.returned_to_baseline())
         # print(cyc.cycle_num, " has flat tail?  ", cyc.has_flat_tail())
-        if cyc.type in ["Startup", "DMSO Cal.", "TubingWash"]:
+        if cyc.type in ["Startup", "TubingWash"]:
             continue  # don't plot
         elif cyc.type == "Blank":
             _ = plot_sensogram(
@@ -95,7 +95,7 @@ def perform_creoptix_fitting(
     t_end = time.time()
 
     n_samples = [
-        c for c in cycles_data if c.type in ["Blank", "Sample", "ControlSample"]
+        c for c in cycles_data if c.type in ["Blank", "`Sample`", "ControlSample"]
     ]
     print(
         f"Plotted sensograms for {len(n_samples)} cycles in {t_end - t_start} seconds."
@@ -137,7 +137,8 @@ def main():
     data_dir = "C:/Users/stat0524-admin/Creoptix_Fitting/data/example/"
     results_name = "PlottingResults"
     perform_creoptix_fitting(
-        project_name=project_name, data_dir=data_dir, results_name=results_name
+        "C:\\Users\\stat0524-admin\\Creoptix_Fitting\\data\\20250826_DENV-2 NS2B3 Binding Assay.cxw",
+        project_name=project_name, data_dir=data_dir, results_dir=results_name
     )
 
 

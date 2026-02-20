@@ -128,7 +128,7 @@ def plot_sensogram(
     ax1.legend()
     ax2.legend()
     plotfile = f"cycle{cycle.cycle_num}_{name}.png"
-    fig.suptitle(f"cycle{cycle.cycle_num}_{name}")
+    fig.suptitle(f"cycle{cycle.cycle_num}_{name}_{cycle.reagent["Designation"]}")
     fig.savefig(pathlib.Path(directory / plotfile), bbox_inches="tight")
     plt.close(fig)
     return binding_type
@@ -138,7 +138,7 @@ def classify_sensogram(
     cycle, tail_slope_tol=0.05, max_response=None, response_thresh=5.0
 ):
     # is the binding response difference between channels < threshold?  (non-binding)
-    print(f"Sensogram for Cycle: {cycle.cycle_num}", end="    ")
+    print(f"Sensogram for Cycle: {cycle.cycle_num}, {cycle.reagent["Designation"]}", end="    ")
     bare_channel_ok, reason = check_bare_channel_ok(
         cycle, fc="FC1", tail_slope_tol=tail_slope_tol, response_thresh=response_thresh
     )

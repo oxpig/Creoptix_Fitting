@@ -25,7 +25,6 @@ then the path must be given in the notebook as `/users/<username>/20260202`.  If
 
 
 ## Known Issues
-- The Creoptix project file must currently be unzipped (using 7zip) before it can be analysed.
 - A Creoptix project file containing more than one experimental "run" cannot be processed at present -- use Creoptix WaveControl to save the desired data as a separate project.
 
 
