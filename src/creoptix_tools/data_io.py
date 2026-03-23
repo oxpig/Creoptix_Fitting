@@ -74,7 +74,8 @@ class CreoptixCycle:
         t_dissociation=60.0,
         t_baseline=45.0,
         adjusted_dataset=None,
-        reagent=None
+        reagent=None,
+        sampleid=None
     ):
         self.dataset = dataset
         self.type = type
@@ -85,6 +86,7 @@ class CreoptixCycle:
         self.t_baseline = float(t_baseline)
         self.adjusted_dataset = adjusted_dataset
         self.reagent=reagent
+        self.sampleid=sampleid
 
         self.baseline_values = {
             "FC1": None,
@@ -212,6 +214,7 @@ def ingest_project_data(xml_path, h5_path):
             dissociation = cycle.find("TimeAfterInjection").text
             baseline = cycle.find("BaselineDuration").text
             reagent_ref = cycle.find("ReagentRef")
+            sampleid = cycle.find("Name").text.split(" - ")[2]
 
             dataset = get_h5_data_for_guid(h5_file, guid)
             data_to_keep = ["Time", "FC1", "FC2", "FC3", "FC4"]
@@ -235,7 +238,8 @@ def ingest_project_data(xml_path, h5_path):
                     t_contact=float(contact),
                     t_dissociation=float(dissociation),
                     t_baseline=float(baseline),
-                    reagent=reagent_info
+                    reagent=reagent_info,
+                    sampleid=sampleid
                 )
             )
     return cycles

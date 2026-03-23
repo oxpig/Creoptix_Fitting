@@ -104,13 +104,13 @@ def perform_creoptix_fitting(
     # Create a summary table of binding type for each cycle
     result_df = pd.DataFrame(
         [
-            [i, cycles_data[i - 1].type, cycle_binding_type[i]]
+            [i, cycles_data[i - 1].type, cycles_data[i - 1].sampleid, cycle_binding_type[i]]
             for i in cycle_binding_type.keys()
         ]
     )
     result_df.to_csv(
         pathlib.Path(results_path / "binding_table.csv"),
-        header=["CycleID", "CycleType", "BindingType"],
+        header=["CycleID", "CycleType", "SampleID", "BindingType"],
         index=False,
     )
 
