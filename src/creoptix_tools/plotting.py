@@ -1,7 +1,10 @@
 import scipy
 import matplotlib.pyplot as plt
 import pathlib
+import numpy as np
+from creoptix_tools.data_io import CREOPTIX_TIME_STEP
 
+dt = CREOPTIX_TIME_STEP
 
 def plot_sensogram(
     cycle,
@@ -79,7 +82,9 @@ def plot_sensogram(
                 color="black",
             )
             peak_data_diff, _ = scipy.signal.find_peaks(ydata2 - ydata1, prominence=1)
+            peak_data_diff = [p - (int(np.floor(0.5 / dt))) for p in peak_data_diff]  # adjust to look for value at 0.5 ms before peak
             max_binding_response = max((ydata2 - ydata1)[peak_data_diff], default=0.0)
+            cycle.response_dict[f"{current_channel}-1"] = max_binding_response
             ax2.scatter(
                 tdata[peak_data_diff],
                 (ydata2 - ydata1)[peak_data_diff],
@@ -88,7 +93,8 @@ def plot_sensogram(
                 color="purple",
             )
 
-        binding_type = classify_sensogram(cycle, max_response=max_binding_response)
+        binding_type = classify_sensogram(cycle, fc=current_channel, max_response=max_binding_response)
+        cycle.binding_dict[f"{current_channel}-1"] = binding_type
         # quality = "Good" if rtb[0] and flat_tail[0] else "Bad"
 
         # quality_text = f"{quality} \n Baseline? {rtb[0]} \n Flat tail? {flat_tail[0]}"
@@ -135,16 +141,16 @@ def plot_sensogram(
     fig.suptitle(f"cycle{cycle.cycle_num}_{name}_{cycle.sampleid}")
     fig.savefig(pathlib.Path(directory / plotfile), bbox_inches="tight")
     plt.close(fig)
-    return binding_type
+    return
 
 
 def classify_sensogram(
-    cycle, tail_slope_tol=0.05, max_response=None, response_thresh=5.0
+    cycle, fc="FC1", tail_slope_tol=0.05, max_response=None, response_thresh=5.0
 ):
     # is the binding response difference between channels < threshold?  (non-binding)
-    print(f"Sensogram for Cycle: {cycle.cycle_num}, {cycle.sampleid}", end="    ")
+    print(f"Sensogram for Cycle: {cycle.cycle_num}, {cycle.sampleid}, channel {fc}", end="    ")
     bare_channel_ok, reason = check_bare_channel_ok(
-        cycle, fc="FC1", tail_slope_tol=tail_slope_tol, response_thresh=response_thresh
+        cycle, fc=fc, tail_slope_tol=tail_slope_tol, response_thresh=response_thresh
     )
     if not bare_channel_ok:
         print(f"Bare channel is not valid: {reason}")

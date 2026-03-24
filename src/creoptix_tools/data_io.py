@@ -87,6 +87,8 @@ class CreoptixCycle:
         self.adjusted_dataset = adjusted_dataset
         self.reagent=reagent
         self.sampleid=sampleid
+        self.binding_dict = {"FC2-1": None, "FC3-1": None, "FC4-1": None}  # to be filled in after plotting/classification
+        self.response_dict = {"FC2-1": None, "FC3-1": None, "FC4-1": None}  # to be filled in after plotting/classification
 
         self.baseline_values = {
             "FC1": None,
