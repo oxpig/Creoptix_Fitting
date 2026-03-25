@@ -19,11 +19,11 @@ def plot_sensogram(
     else:
         dataset = cycle.dataset
     fig = plt.figure(layout="constrained", figsize=(14, 6))
-    channels = ["FC2", "FC3", "FC4"]
-    n_channels_in_cycle = sum(1 for ch in channels if ch in dataset.keys())
+    fcs = ["FC2", "FC3", "FC4"]
+    n_channels_in_cycle = sum(1 for fc in fcs if fc in dataset.keys())
     subfigs = fig.subfigures(1, n_channels_in_cycle, wspace=0.07)
     for i in range(n_channels_in_cycle):
-        current_channel = channels[i]
+        current_channel = fcs[i]
         tdata = dataset["Time"]
         ydata1 = dataset["FC1"]
         ydata2 = dataset[current_channel]
@@ -84,7 +84,7 @@ def plot_sensogram(
             peak_data_diff, _ = scipy.signal.find_peaks(ydata2 - ydata1, prominence=1)
             peak_data_diff = [p - (int(np.floor(0.5 / dt))) for p in peak_data_diff]  # adjust to look for value at 0.5 ms before peak
             max_binding_response = max((ydata2 - ydata1)[peak_data_diff], default=0.0)
-            cycle.response_dict[f"{current_channel}-1"] = max_binding_response
+            cycle.response_values[f"{current_channel}-1"] = max_binding_response
             ax2.scatter(
                 tdata[peak_data_diff],
                 (ydata2 - ydata1)[peak_data_diff],
@@ -94,7 +94,10 @@ def plot_sensogram(
             )
 
         binding_type = classify_sensogram(cycle, fc=current_channel, max_response=max_binding_response)
-        cycle.binding_dict[f"{current_channel}-1"] = binding_type
+        if binding_type == "Binding":
+            if cycle.noise_values["FC1"] == True or cycle.noise_values[current_channel] == True:
+                binding_type = "Binding:Noisy"
+        cycle.binding_values[f"{current_channel}-1"] = binding_type
         # quality = "Good" if rtb[0] and flat_tail[0] else "Bad"
 
         # quality_text = f"{quality} \n Baseline? {rtb[0]} \n Flat tail? {flat_tail[0]}"
@@ -110,6 +113,7 @@ def plot_sensogram(
         # these are matplotlib.patch.Patch properties
         color = {
             "Binding": "palegreen",
+            "Binding:Noisy": "lightgreen",
             "No Binding": "lightcoral",
             "Non-specific": "khaki",
             "Unknown": "lightgrey",

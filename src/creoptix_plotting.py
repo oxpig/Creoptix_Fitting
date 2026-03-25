@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import pathlib
 import zipfile
 import time
@@ -77,7 +78,8 @@ def perform_creoptix_fitting(
             n_samples += 1
         cyc.calculate_baselines()
         cyc.apply_corrections()
-        most_recent_blank = cyc.get_most_recent_sample_of_type(cycles_data, sample_type="Blank")
+        cyc.check_noise()
+        # blank = cyc.get_most_recent_sample_of_type(cycles_data, sample_type="Blank")
         # if last_blank:
         #     # cycles_data indexed from 0 but cycle_num indexed from 1
         #     blank_cycle = cycles_data[most_recent_blank - 1]
@@ -88,7 +90,7 @@ def perform_creoptix_fitting(
         # print(cyc.cycle_num, " has flat tail?  ", cyc.has_flat_tail())
         if cyc.type in ["Startup", "TubingWash"]:
             continue  # don't plot
-        elif cyc.type == "Blank":
+        elif cyc.type not in ["Sample", "ControlSample"]:
             plot_sensogram(
                 cyc,
                 name=cyc.type.replace(" ", "_").strip("."),
@@ -96,19 +98,20 @@ def perform_creoptix_fitting(
                 directory=results_path,
             )
         else:
+            blank = cyc.get_blank_cycle(cycles_data)
             plot_sensogram(
                 cyc,
                 name=cyc.type.replace(" ", "_").strip("."),
-                correct_for_blank=most_recent_blank,
+                correct_for_blank=blank,
                 diff=True,
                 directory=results_path,
             )
-        result_data["CycleID"].append(cyc.cycle_num)
-        result_data["CycleType"].append(cyc.type)
-        result_data["SampleID"].append(cyc.sampleid)
-        for channel in ["FC2", "FC3", "FC4"]:
-            result_data[f"BindingType_{channel}-1"].append(cyc.binding_dict[f"{channel}-1"])
-            result_data[f"Response_{channel}-1"].append(cyc.response_dict[f"{channel}-1"])
+            result_data["CycleID"].append(cyc.cycle_num)
+            result_data["CycleType"].append(cyc.type)
+            result_data["SampleID"].append(cyc.sampleid)
+            for channel in ["FC2", "FC3", "FC4"]:
+                result_data[f"BindingType_{channel}-1"].append(cyc.binding_values[f"{channel}-1"])
+                result_data[f"Response_{channel}-1"].append(int(np.floor(cyc.response_values[f"{channel}-1"])))
 
 
     t_end = time.time()

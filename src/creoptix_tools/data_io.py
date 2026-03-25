@@ -63,6 +63,24 @@ def get_h5_data_for_guid(h5_file, guid):
     return datasets
 
 
+def blank_is_valid(cycle, neg_thresh=-5, max_thresh=50):
+    assert cycle.type == "Blank"
+    fcs = ["FC2", "FC3", "FC4"]
+    for fc in fcs:
+        if cycle.noise_values[fc]:
+            return False    # Not valid if blank channel is noisy
+        dt = CREOPTIX_TIME_STEP
+        ibaseline_end = int(np.floor(cycle.t_baseline / dt))
+        if not cycle.adjusted_dataset:
+            cycle.apply_corrections()
+        blank_dataset = cycle.adjusted_dataset[fc][ibaseline_end:] - cycle.adjusted_dataset["FC1"][ibaseline_end:]
+        if np.min(blank_dataset) < neg_thresh:
+            return False    # Not valid if blank has negative response after injection
+        if np.max(blank_dataset) > max_thresh:
+            return False    # Not valid if blank has very high response after injection
+    return True
+
+
 class CreoptixCycle:
     def __init__(
         self,
@@ -87,15 +105,29 @@ class CreoptixCycle:
         self.adjusted_dataset = adjusted_dataset
         self.reagent=reagent
         self.sampleid=sampleid
-        self.binding_dict = {"FC2-1": None, "FC3-1": None, "FC4-1": None}  # to be filled in after plotting/classification
-        self.response_dict = {"FC2-1": None, "FC3-1": None, "FC4-1": None}  # to be filled in after plotting/classification
-
+        
         self.baseline_values = {
             "FC1": None,
             "FC2": None,
             "FC3": None,
             "FC4": None,
         }  # For each flow channel
+        self.noise_values = {
+            "FC1": None,
+            "FC2": None,
+            "FC3": None,
+            "FC4": None}  # to track noise in each channel
+
+        self.binding_values = {
+            "FC2-1": None,
+            "FC3-1": None,
+            "FC4-1": None
+        }  # to be filled in after plotting/classification
+        self.response_values = {
+            "FC2-1": None,
+            "FC3-1": None,
+            "FC4-1": None
+        }  # to be filled in after plotting/classification
 
         if self.reagent and self.type == "Sample":
             rgnt_conc_value, rgnt_conc_unit = self.reagent["Concentration"].split()
@@ -106,7 +138,7 @@ class CreoptixCycle:
             else:
                 raise Exception(f"Unknown unit for reagent concentration: {rgnt_conc_unit}")
             self.reagent["Conc_Value"] = float(rgnt_conc_value) * 10.0**mag
-            print(f"Normalised concentration: {self.reagent["Conc_Value"]}")
+            #print(f"Normalised concentration: {self.reagent["Conc_Value"]}")
             
 
     def get_most_recent_sample_of_type(self, cycles_data, sample_type=None):
@@ -119,6 +151,20 @@ class CreoptixCycle:
             return None
         else:
             return valids[-1]
+        
+    def get_blank_cycle(self, cycles_data):
+        valids = [c for c in cycles_data if c.type == "Blank" and blank_is_valid(cycle=c)]
+        most_recent = [c for c in valids if c.cycle_num < self.cycle_num]
+        if most_recent:
+            return most_recent[-1]
+        else:
+            if valids:
+                blank = valids[0]
+                print(f"Warning: no valid blank cycle found before cycle {self.cycle_num}. Using first valid blank from cycle {blank.cycle_num}.")
+                return blank
+            else:
+                print(f"Warning: no valid blank cycles found in dataset!")
+                return None            
 
     def apply_corrections(self, yofftime=40.0, yavgwindow=2.0):
         self.adjusted_dataset = copy.deepcopy(self.dataset)
@@ -195,6 +241,22 @@ class CreoptixCycle:
         peaks, peak_props = scipy.signal.find_peaks(self.dataset[fc], prominence=1)
         # cwt_peaks = scipy.signal.find_peaks_cwt(nparray[:,-1],np.arange(1,50))
         return peaks, peak_props
+    
+    def check_noise(self, noise_threshold=5.0):
+        # Check if the signal is noisy by looking at the standard deviation of the baseline region
+        fcs = ["FC1", "FC2", "FC3", "FC4"]
+        for fc in fcs:
+            dt = CREOPTIX_TIME_STEP
+            ibaseline_end = int(np.floor(self.t_baseline / dt))
+            if self.adjusted_dataset:
+                baseline_std = np.std(self.adjusted_dataset[fc][0:ibaseline_end])
+            else:
+                baseline_std = np.std(self.dataset[fc][0:ibaseline_end])
+            if baseline_std > noise_threshold:
+                self.noise_values[fc] = True
+            else:
+                self.noise_values[fc] = False
+        return
 
 
 def ingest_project_data(xml_path, h5_path):
