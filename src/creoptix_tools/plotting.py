@@ -5,6 +5,8 @@ import numpy as np
 from creoptix_tools.data_io import CREOPTIX_TIME_STEP
 
 dt = CREOPTIX_TIME_STEP
+DELTA_DISS = int(np.floor(1.5 / dt)) # default response in dissociation phase 1.5 s after rinse time
+DELTA_BIND = int(np.floor(0.5 / dt)) # default response in binding phase 0.5 s before rinse time
 
 def plot_sensogram(
     cycle,
@@ -60,16 +62,38 @@ def plot_sensogram(
         ax1.plot(tdata, ydata2, label="Cycle ID: " + str(cycle.cycle_num) + f" FC{i+2}")
         peak_data1, _ = scipy.signal.find_peaks(ydata1, prominence=1)
         peak_data2, _ = scipy.signal.find_peaks(ydata2, prominence=1)
+        # ax1.scatter(
+        #     tdata[peak_data1],
+        #     ydata1[peak_data1],
+        #     facecolors="none",
+        #     marker="o",
+        #     color="red",
+        # )
+        # ax1.scatter(
+        #     tdata[peak_data2],
+        #     ydata2[peak_data2],
+        #     facecolors="none",
+        #     marker="o",
+        #     color="green",
+        # )
+        irinse = (int(np.floor(cycle.t_rinse / dt)))
         ax1.scatter(
-            tdata[peak_data1],
-            ydata1[peak_data1],
+            tdata[irinse+DELTA_DISS],
+            ydata1[irinse+DELTA_DISS],
             facecolors="none",
             marker="o",
             color="red",
         )
         ax1.scatter(
-            tdata[peak_data2],
-            ydata2[peak_data2],
+            tdata[irinse-DELTA_BIND],
+            ydata1[irinse-DELTA_BIND],
+            facecolors="none",
+            marker="o",
+            color="red",
+        )
+        ax1.scatter(
+            tdata[irinse-DELTA_BIND],
+            ydata2[irinse-DELTA_BIND],
             facecolors="none",
             marker="o",
             color="green",
@@ -82,21 +106,38 @@ def plot_sensogram(
                 color="black",
             )
             peak_data_diff, _ = scipy.signal.find_peaks(ydata2 - ydata1, prominence=1)
-            peak_data_diff = [p - (int(np.floor(0.5 / dt))) for p in peak_data_diff]  # adjust to look for value at 0.5 ms before peak
-            max_binding_response = max((ydata2 - ydata1)[peak_data_diff], default=0.0)
+            peak_data_diff = [p - (int(np.floor(0.5 / dt))) for p in peak_data_diff]  # adjust to look for value at 0.5 s before peak
+            # max_binding_response = max((ydata2 - ydata1)[peak_data_diff], default=0.0)
+            max_binding_response = (ydata2 - ydata1)[irinse-DELTA_BIND]
             cycle.response_values[f"{current_channel}-1"] = max_binding_response
+            # ax2.scatter(
+            #     tdata[peak_data_diff],
+            #     (ydata2 - ydata1)[peak_data_diff],
+            #     facecolors="none",
+            #     marker="o",
+            #     color="purple",
+            # )
             ax2.scatter(
-                tdata[peak_data_diff],
-                (ydata2 - ydata1)[peak_data_diff],
-                facecolors="none",
-                marker="o",
-                color="purple",
-            )
-
-        binding_type = classify_sensogram(cycle, fc=current_channel, max_response=max_binding_response)
+            tdata[irinse-DELTA_BIND],
+            (ydata2 - ydata1)[irinse-DELTA_BIND],
+            facecolors="none",
+            marker="o",
+            color="purple",
+        )
+        
+        # Get linear regression of tail of sensogram before classifying binding type
+        LR_result = scipy.stats.linregress(tdata[-200:], ydata2[-200:] - ydata1[-200:])
+        binding_type = classify_sensogram(
+            cycle,
+            fc=current_channel,
+            LR=LR_result,
+            max_response=max_binding_response
+        )
         if binding_type == "Binding":
             if cycle.noise_values["FC1"] == True or cycle.noise_values[current_channel] == True:
-                binding_type = "Binding:Noisy"
+                binding_type += ":Noisy"
+            if not (-0.05 < LR_result.slope < 0.05):
+                binding_type += ":Drift"
         cycle.binding_values[f"{current_channel}-1"] = binding_type
         # quality = "Good" if rtb[0] and flat_tail[0] else "Bad"
 
@@ -113,10 +154,14 @@ def plot_sensogram(
         # these are matplotlib.patch.Patch properties
         color = {
             "Binding": "palegreen",
-            "Binding:Noisy": "lightgreen",
+            "Binding:Noisy": "darkseagreen",
+            "Binding:Drift": "darkseagreen",
+            "Binding:Noisy:Drift": "darkseagreen",
             "No Binding": "lightcoral",
+            "Check": "wheat",
             "Non-specific": "khaki",
             "Unknown": "lightgrey",
+            "Ignore": "darkgrey"
         }
         props = dict(boxstyle="round", facecolor=color[binding_type], alpha=0.5)
         if "Sample" in cycle.type: # No need to label binding type for blank or DMSO cycles.
@@ -148,7 +193,7 @@ def plot_sensogram(
     return
 
 
-def classify_sensogram(
+def classify_sensogram_old(
     cycle, fc="FC1", tail_slope_tol=0.05, max_response=None, response_thresh=5.0
 ):
     # is the binding response difference between channels < threshold?  (non-binding)
@@ -166,6 +211,35 @@ def classify_sensogram(
         binding_type = check_relative_response(max_response, response_thresh=5.0)
     return binding_type
 
+def classify_sensogram(
+    cycle, fc="FC1", LR=None, max_response=None, response_thresh=5.0
+):
+    # is the binding response difference between channels < threshold?  (non-binding)
+    print(f"Sensogram for Cycle: {cycle.cycle_num}, {cycle.sampleid}, channel {fc}", end="    ")
+    blank_channel_ok, reason = check_blank_channel_ok(cycle, dissociation_thresh=response_thresh)
+    if not blank_channel_ok:
+        print(f"Blank channel is not valid: {reason}")
+        if reason == "Negative responses":
+            binding_type = "Ignore"
+        elif reason == "Non-specific interactions":
+            binding_type = "Non-specific"
+        return binding_type
+    active_channel_ok, reason = check_active_channel_ok(cycle, fc=fc)
+    if not active_channel_ok:
+        print(f"Active channel is not valid: {reason}")
+        binding_type = "Unknown"
+        return binding_type
+    diff_ok, reason = check_diff_ok(cycle, LR=LR, tail_thresh=response_thresh, max_response=max_response, response_thresh=response_thresh)
+    if not diff_ok:
+        print(f"Difference between active and blank channels is not valid: {reason}")
+        if reason == "Max response is below threshold":
+            binding_type = "No Binding"
+        elif reason == "Tail is above threshold":
+            binding_type = "Check"
+        return binding_type
+    binding_type = "Binding"
+    return binding_type
+
 
 def check_bare_channel_ok(cycle, fc="FC1", tail_slope_tol=0.05, response_thresh=5.0):
     # is the bare ("blank") channel binding in tail of sensogram?
@@ -181,7 +255,40 @@ def check_bare_channel_ok(cycle, fc="FC1", tail_slope_tol=0.05, response_thresh=
         return False, "Tail is above threshold"
     else:
         return True, "Tail is flat and within thresholds"
+    
+def check_blank_channel_ok(cycle, dissociation_thresh=5.0):
+    # does the blank channel show negative responses?
+    # is the blank channel showing response during dissociation phase above threshold?
+    if not cycle.adjusted_dataset:
+        cycle.apply_corrections()
+    injection_start = (int(np.floor(cycle.t_baseline / dt)))
+    blank_dataset = cycle.adjusted_dataset["FC1"]
+    if min(blank_dataset[injection_start:]) <= -5.0:
+        return False, "Negative responses"
+    irinse= (int(np.floor(cycle.t_rinse / dt)))
+    print(f"Blank channel dissociation response after rinse time: {blank_dataset[irinse + DELTA_DISS]:.3f}")
+    if blank_dataset[irinse + DELTA_DISS] > dissociation_thresh:  # look for response in dissociation phase 0.5 s after rinse time
+        return False, f"Non-specific interactions"
+    return True, "Blank channel is ok!"
 
+def check_active_channel_ok(cycle, fc="FC2"):
+    # does the active channel show negative responses?
+    if not cycle.adjusted_dataset:
+        cycle.apply_corrections()
+    injection_start = (int(np.floor(cycle.t_baseline / dt)))
+    active_dataset = cycle.adjusted_dataset[fc]
+    if min(active_dataset[injection_start:]) <= -5.0:
+        return False, "Negative responses"
+    return True, "Active channel is ok!"
+
+def check_diff_ok(cycle, LR=None, tail_thresh=5.0, max_response=None, response_thresh=5.0):
+    # does the tail of the difference between active and blank channels goes back to baseline?
+    # is the difference between active and blank channels showing binding response above threshold?
+    if max_response < response_thresh:
+        return False, "Max response is below threshold"
+    if LR.intercept > tail_thresh:
+        return False, "Tail is above threshold"
+    return True, "Difference between active and blank channels is ok, Binding!"
 
 def check_relative_response(max_response, response_thresh=5.0):
     if max_response < 0.0:
