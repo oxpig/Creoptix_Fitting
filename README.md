@@ -25,6 +25,6 @@ then the path must be given in the notebook as `/users/<username>/20260202`.  If
 
 
 ## Known Issues
-- A Creoptix project file containing more than one experimental "run" cannot be processed at present -- use Creoptix WaveControl to save the desired data as a separate project.
+- A Creoptix project with no data in any of the 3 active channels (FC2, FC3 or FC4) will have no valid blank cycle for blank corrections as the blank cycle for the missing channel(s) will most likely be rejected (rejecting of 3 blanks for all channels for a given cycle)
 
 

@@ -94,7 +94,8 @@ class CreoptixCycle:
         adjusted_dataset=None,
         reagent=None,
         sampleid=None,
-        rinse=0.0
+        rinse=0.0,
+        subdir=None
     ):
         self.dataset = dataset
         self.type = type
@@ -107,6 +108,7 @@ class CreoptixCycle:
         self.adjusted_dataset = adjusted_dataset
         self.reagent=reagent
         self.sampleid=sampleid
+        self.subdir=subdir
         
         self.baseline_values = {
             "FC1": None,
@@ -261,55 +263,65 @@ class CreoptixCycle:
         return
 
 
-def ingest_project_data(xml_path, h5_path):
+def ingest_project_data(xml_path, h5_path, results_path="."):
     cycles = []
     xml = read_project_xml(xml_path)
     root = xml.getroot()
+    pulse_series = []
     for serie in root.iter("Serie"):
         if serie.find("Type").text == "Pulse":
-            pulse_serie = serie
-            break
-    serie_cycles = pulse_serie.iter("Cycle")  # iterator
+            pulse_series.append(serie)
+    
+    for i, ps in enumerate(pulse_series):
+        subdir = pathlib.Path(results_path / f"Serie_{i+1:02d}")
+        subdir.mkdir(parents=True, exist_ok=True)
+        if "RAPID Kinetics: " not in ps.find("Name").text:
+            print(f"Warning: pulse serie {i+1:02d} name is different from 'RAPID Kinetics: ' ({ps.find('Name').text}).")
 
-    with h5py.File(h5_path, "r") as h5_file:
-        for cycle in serie_cycles:
-            cycle_type = cycle.find("CycleType").text
-            cycle_number = cycle.find("Index").text
-            guid = cycle.find("Guid").text
-            contact = cycle.find("ContactTime").text
-            dissociation = cycle.find("TimeAfterInjection").text
-            baseline = cycle.find("BaselineDuration").text
-            reagent_ref = cycle.find("ReagentRef")
-            sampleid = cycle.find("Name").text.split(" - ")[2]
-            for marker in cycle.iter("Marker"):
-                if marker.find("Type").text == "Rinse":
-                    rinse = marker.find("X").text
+        serie_cycles = ps.iter("Cycle")  # iterator
+        try:
+            with h5py.File(h5_path, "r") as h5_file:
+                for cycle in serie_cycles:
+                    cycle_type = cycle.find("CycleType").text
+                    cycle_number = cycle.find("Index").text
+                    guid = cycle.find("Guid").text
+                    contact = cycle.find("ContactTime").text
+                    dissociation = cycle.find("TimeAfterInjection").text
+                    baseline = cycle.find("BaselineDuration").text
+                    reagent_ref = cycle.find("ReagentRef")
+                    sampleid = cycle.find("Name").text.split(" - ")[2]
+                    for marker in cycle.iter("Marker"):
+                        if marker.find("Type").text == "Rinse":
+                            rinse = marker.find("X").text
 
-            dataset = get_h5_data_for_guid(h5_file, guid)
-            data_to_keep = ["Time", "FC1", "FC2", "FC3", "FC4"]
-            # cols_to_keep = [HDF5_CYCLE_DSET_COLS[lab] for lab in data_labels]
-            cycle_data = {
-                lab: dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep
-            }
-            # Add reagent data
-            side = reagent_ref.find("AutosamplerLocation").get("Side")
-            slot = reagent_ref.find("AutosamplerLocation").get("Slot")
-            for rgnt in pulse_serie.findall("AutosamplerVM/"+side+"Rack/Reagents/Reagent"):
-                if rgnt.attrib["Slot"] == slot:
-                    reagent_info = copy.copy(rgnt.attrib)
+                    dataset = get_h5_data_for_guid(h5_file, guid)
+                    data_to_keep = ["Time", "FC1", "FC2", "FC3", "FC4"]
+                    # cols_to_keep = [HDF5_CYCLE_DSET_COLS[lab] for lab in data_labels]
+                    cycle_data = {
+                        lab: dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep
+                    }
+                    # Add reagent data
+                    side = reagent_ref.find("AutosamplerLocation").get("Side")
+                    slot = reagent_ref.find("AutosamplerLocation").get("Slot")
+                    for rgnt in ps.findall("AutosamplerVM/"+side+"Rack/Reagents/Reagent"):
+                        if rgnt.attrib["Slot"] == slot:
+                            reagent_info = copy.copy(rgnt.attrib)
 
-            cycles.append(
-                CreoptixCycle(
-                    cycle_data,
-                    cycle_type,
-                    cycle_number,
-                    guid,
-                    t_contact=float(contact),
-                    t_dissociation=float(dissociation),
-                    t_baseline=float(baseline),
-                    reagent=reagent_info,
-                    sampleid=sampleid,
-                    rinse=rinse
-                )
-            )
+                    cycles.append(
+                        CreoptixCycle(
+                            cycle_data,
+                            cycle_type,
+                            cycle_number,
+                            guid,
+                            t_contact=float(contact),
+                            t_dissociation=float(dissociation),
+                            t_baseline=float(baseline),
+                            reagent=reagent_info,
+                            sampleid=sampleid,
+                            rinse=rinse,
+                            subdir=subdir.name
+                        )
+                    )
+        except Exception as e:
+            print(f"Error occurred while processing pulse serie {i+1:02d}: {e}")
     return cycles

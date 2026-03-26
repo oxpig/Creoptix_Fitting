@@ -188,7 +188,7 @@ def plot_sensogram(
         ax2.legend()
     plotfile = f"cycle{cycle.cycle_num}_{name}.png"
     fig.suptitle(f"cycle{cycle.cycle_num}_{name}_{cycle.sampleid}")
-    fig.savefig(pathlib.Path(directory / plotfile), bbox_inches="tight")
+    fig.savefig(pathlib.Path(directory / cycle.subdir / plotfile), bbox_inches="tight")
     plt.close(fig)
     return
 

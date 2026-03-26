@@ -59,9 +59,10 @@ def perform_creoptix_fitting(
     unzip_data(creoptix_zipfile=creoptix_zipfile, data_path=data_path)
     xml_path = pathlib.Path(data_path / "_project.cx3")
     h5_path = pathlib.Path(data_path / "cyclesData.h5")
-    cycles_data = ingest_project_data(xml_path, h5_path)
+    cycles_data = ingest_project_data(xml_path, h5_path, results_path)
 
     result_data = {
+        "SerieID": [],
         "CycleID": [],
         "CycleType": [],
         "SampleID": [],
@@ -106,6 +107,7 @@ def perform_creoptix_fitting(
                 diff=True,
                 directory=results_path,
             )
+            result_data["SerieID"].append(cyc.subdir.split("_")[-1])  # extract series number from subdir name
             result_data["CycleID"].append(cyc.cycle_num)
             result_data["CycleType"].append(cyc.type)
             result_data["SampleID"].append(cyc.sampleid)
@@ -123,7 +125,7 @@ def perform_creoptix_fitting(
     # Export a summary table of binding type and response for each channel of each cycle
     result_df = pd.DataFrame(result_data)
     result_df.to_csv(
-        pathlib.Path(results_path / "binding_table.csv"),
+        pathlib.Path(results_path /  "binding_table.csv"),
         index=False,
     )
 
