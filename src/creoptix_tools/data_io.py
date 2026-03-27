@@ -95,7 +95,8 @@ class CreoptixCycle:
         reagent=None,
         sampleid=None,
         rinse=0.0,
-        subdir=None
+        subdir=None,
+        acquisition_rate=None,   # acquisition rate in Hz
     ):
         self.dataset = dataset
         self.type = type
@@ -109,6 +110,7 @@ class CreoptixCycle:
         self.reagent=reagent
         self.sampleid=sampleid
         self.subdir=subdir
+        self.acquisition_rate=acquisition_rate
         
         self.baseline_values = {
             "FC1": None,
@@ -263,15 +265,19 @@ class CreoptixCycle:
         return
 
 
-def ingest_project_data(xml_path, h5_path, results_path="."):
+def ingest_project_data(xml_path, h5_path, results_path=pathlib.Path(".")):
     cycles = []
     xml = read_project_xml(xml_path)
     root = xml.getroot()
     pulse_series = []
+    acquisition_rates = []
     for serie in root.iter("Serie"):
         if serie.find("Type").text == "Pulse":
             pulse_series.append(serie)
-    
+            rate = serie.find("AcquisitionRate").text
+            acquisition_rates.append(rate)
+            print(f"Acquisition rate for serie {serie.find('Name').text}: {rate} Hz")
+
     for i, ps in enumerate(pulse_series):
         subdir = pathlib.Path(results_path / f"Serie_{i+1:02d}")
         subdir.mkdir(parents=True, exist_ok=True)
@@ -319,7 +325,8 @@ def ingest_project_data(xml_path, h5_path, results_path="."):
                             reagent=reagent_info,
                             sampleid=sampleid,
                             rinse=rinse,
-                            subdir=subdir.name
+                            subdir=subdir.name,
+                            acquisition_rate=float(acquisition_rates[i])
                         )
                     )
         except Exception as e:

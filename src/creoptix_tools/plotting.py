@@ -16,6 +16,10 @@ def plot_sensogram(
     name=None,
     directory=None,
 ):
+    if cycle.acquisition_rate:
+        dt = 1.0 / cycle.acquisition_rate
+        DELTA_DISS = int(np.floor(1.5 / dt))
+        DELTA_BIND = int(np.floor(0.5 / dt))
     if cycle.adjusted_dataset:
         dataset = cycle.adjusted_dataset
     else:
