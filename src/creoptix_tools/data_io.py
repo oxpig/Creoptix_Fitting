@@ -276,7 +276,6 @@ def ingest_project_data(xml_path, h5_path, results_path=pathlib.Path(".")):
             pulse_series.append(serie)
             rate = serie.find("AcquisitionRate").text
             acquisition_rates.append(rate)
-            print(f"Acquisition rate for serie {serie.find('Name').text}: {rate} Hz")
 
     for i, ps in enumerate(pulse_series):
         subdir = pathlib.Path(results_path / f"Serie_{i+1:02d}")
