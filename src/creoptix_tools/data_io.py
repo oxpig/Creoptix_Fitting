@@ -4,6 +4,7 @@ import pathlib
 import xml.etree.ElementTree as ET
 import h5py  # pandas HDF5 support is limited to specific structures -- need h5py
 import copy
+from collections import namedtuple
 
 CREOPTIX_TIME_STEP = 0.1  # timestep seems to be fixed by Creoptix
 CREOPTIX_TIME_TO_LOAD_CHIP = 1.4  # seconds
@@ -41,7 +42,7 @@ quality_criteria = {
     "relative_response_peak_height": 5,  # pg/mm^2
 }
 
-
+Pulse = namedtuple("Pulse",["duration","gap"])
 
 def read_project_xml(pathstr):
     path_to_file = pathlib.Path(pathstr)
@@ -93,6 +94,8 @@ class CreoptixCycle:
         t_baseline=45.0,
         adjusted_dataset=None,
         reagent=None,
+        conc_wrt_time=None,
+        pulses=None,
         sampleid=None,
         rinse=0.0,
         subdir=None,
@@ -111,7 +114,8 @@ class CreoptixCycle:
         self.sampleid=sampleid
         self.subdir=subdir
         self.acquisition_rate=acquisition_rate
-        
+        self.conc_wrt_time=conc_wrt_time
+        self.pulses=pulses
         self.baseline_values = {
             "FC1": None,
             "FC2": None,
@@ -144,9 +148,29 @@ class CreoptixCycle:
             else:
                 raise Exception(f"Unknown unit for reagent concentration: {rgnt_conc_unit}")
             self.reagent["Conc_Value"] = float(rgnt_conc_value) * 10.0**mag
-            #print(f"Normalised concentration: {self.reagent["Conc_Value"]}")
-            
-
+            ##print(f"Normalised concentration: {self.reagent["Conc_Value"]}")
+    
+    def get_dissociation_phases(self):
+        if self.dissoc_phases:
+            return
+        else:
+            self.dissoc_phases=[]
+            t0 = 2.0
+            self.pulses.append(self.t_disssociation) # final dissociation phase length
+            pulses = self.pulses
+            if len(pulses) % 2 != 0:
+                raise Exception(f"Error, number of time points for pulses is not even."
+                                "At least one dissociation phase is unbounded.")
+            ti_starts = np.array([
+                t0+sum(pulses[:n+1]) for n in range(0,len(pulses),2)
+            ])
+            ti_ends = np.array([
+                t0+sum(pulses[:n+2]) for n in range(0,len(pulses),2)
+            ])
+            self.dissoc_phases=list(zip(ti_starts,ti_ends))
+            print(f"Dissociation phases = {self.dissoc_phases}")
+            return
+           
     def get_most_recent_sample_of_type(self, cycles_data, sample_type=None):
         if sample_type not in CREOPTIX_SAMPLE_TYPES:
             raise Exception(f"Unexpected most recent sample type requested ({sample_type}).")
@@ -264,6 +288,19 @@ class CreoptixCycle:
                 self.noise_values[fc] = False
         return
 
+    def get_conc_wrt_time(self,cycles_data,fc="FC2"):
+        most_recent_dmso = self.get_most_recent_sample_of_type(cycles_data, sample_type="DMSO Cal.")
+        input_conc = self.reagent["Conc_Value"]
+        #print(f"INPUT_CONC {input_conc} and nearest DMSO {most_recent_dmso.cycle_num}")
+        dmso_response = most_recent_dmso.dataset[fc]
+        min_response, max_response = (min(dmso_response), max(dmso_response))
+        normalised_response = (most_recent_dmso.dataset[fc]-min_response) / (max_response-min_response)
+        #print(f"Max response: {max_response:.3f} so Normalised Response:{normalised_response}")
+        conc_wrt_time = normalised_response * input_conc
+        #print(f"{conc_wrt_time}")
+        self.conc_wrt_time=conc_wrt_time
+        return
+
 
 def ingest_project_data(xml_path, h5_path, results_path=pathlib.Path(".")):
     cycles = []
@@ -305,6 +342,17 @@ def ingest_project_data(xml_path, h5_path, results_path=pathlib.Path(".")):
                     cycle_data = {
                         lab: dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep
                     }
+
+                    # add pulses data
+                    pulse_data=cycle.findall("PulseDurations/double")
+                    pulses = []
+                    for ip,p in enumerate(pulse_data):
+                        pulse_data[ip] = float(p.text)
+                    print(f"Pulse data for cycle {cycle_number}: {pulse_data}")
+                    # pulses = zip(pulse_data[0::2],pulse_data[1::2])
+                    # pulses = [Pulse(duration=x,gap=y) for (x,y) in pulses]
+                    pulses = pulse_data
+
                     # Add reagent data
                     side = reagent_ref.find("AutosamplerLocation").get("Side")
                     slot = reagent_ref.find("AutosamplerLocation").get("Slot")
