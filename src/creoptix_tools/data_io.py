@@ -63,6 +63,24 @@ def get_h5_data_for_guid(h5_file, guid):
     return datasets
 
 
+def blank_is_valid(cycle, neg_thresh=-5, max_thresh=50):
+    assert cycle.type == "Blank"
+    fcs = ["FC2", "FC3", "FC4"]
+    for fc in fcs:
+        if cycle.noise_values[fc]:
+            return False    # Not valid if blank channel is noisy
+        dt = CREOPTIX_TIME_STEP
+        ibaseline_end = int(np.floor(cycle.t_baseline / dt))
+        if not cycle.adjusted_dataset:
+            cycle.apply_corrections()
+        blank_dataset = cycle.adjusted_dataset[fc][ibaseline_end:] - cycle.adjusted_dataset["FC1"][ibaseline_end:]
+        if np.min(blank_dataset) < neg_thresh:
+            return False    # Not valid if blank has negative response after injection
+        if np.max(blank_dataset) > max_thresh:
+            return False    # Not valid if blank has very high response after injection
+    return True
+
+
 class CreoptixCycle:
     def __init__(
         self,
@@ -74,24 +92,48 @@ class CreoptixCycle:
         t_dissociation=60.0,
         t_baseline=45.0,
         adjusted_dataset=None,
-        reagent=None
+        reagent=None,
+        sampleid=None,
+        rinse=0.0,
+        subdir=None,
+        acquisition_rate=None,   # acquisition rate in Hz
     ):
         self.dataset = dataset
         self.type = type
         self.cycle_num = int(cycle_num)
         self.guid = guid
         self.t_contact = float(t_contact)
-        self.t_disssociation = float(t_dissociation)
+        self.t_dissociation = float(t_dissociation)
         self.t_baseline = float(t_baseline)
+        self.t_rinse = float(rinse)
         self.adjusted_dataset = adjusted_dataset
         self.reagent=reagent
-
+        self.sampleid=sampleid
+        self.subdir=subdir
+        self.acquisition_rate=acquisition_rate
+        
         self.baseline_values = {
             "FC1": None,
             "FC2": None,
             "FC3": None,
             "FC4": None,
         }  # For each flow channel
+        self.noise_values = {
+            "FC1": None,
+            "FC2": None,
+            "FC3": None,
+            "FC4": None}  # to track noise in each channel
+
+        self.binding_values = {
+            "FC2-1": None,
+            "FC3-1": None,
+            "FC4-1": None
+        }  # to be filled in after plotting/classification
+        self.response_values = {
+            "FC2-1": None,
+            "FC3-1": None,
+            "FC4-1": None
+        }  # to be filled in after plotting/classification
 
         if self.reagent and self.type == "Sample":
             rgnt_conc_value, rgnt_conc_unit = self.reagent["Concentration"].split()
@@ -102,7 +144,7 @@ class CreoptixCycle:
             else:
                 raise Exception(f"Unknown unit for reagent concentration: {rgnt_conc_unit}")
             self.reagent["Conc_Value"] = float(rgnt_conc_value) * 10.0**mag
-            print(f"Normalised concentration: {self.reagent["Conc_Value"]}")
+            #print(f"Normalised concentration: {self.reagent["Conc_Value"]}")
             
 
     def get_most_recent_sample_of_type(self, cycles_data, sample_type=None):
@@ -115,6 +157,20 @@ class CreoptixCycle:
             return None
         else:
             return valids[-1]
+        
+    def get_blank_cycle(self, cycles_data):
+        valids = [c for c in cycles_data if c.type == "Blank" and blank_is_valid(cycle=c)]
+        most_recent = [c for c in valids if c.cycle_num < self.cycle_num]
+        if most_recent:
+            return most_recent[-1]
+        else:
+            if valids:
+                blank = valids[0]
+                print(f"Warning: no valid blank cycle found before cycle {self.cycle_num}. Using first valid blank from cycle {blank.cycle_num}.")
+                return blank
+            else:
+                print(f"Warning: no valid blank cycles found in dataset!")
+                return None            
 
     def apply_corrections(self, yofftime=40.0, yavgwindow=2.0):
         self.adjusted_dataset = copy.deepcopy(self.dataset)
@@ -191,51 +247,87 @@ class CreoptixCycle:
         peaks, peak_props = scipy.signal.find_peaks(self.dataset[fc], prominence=1)
         # cwt_peaks = scipy.signal.find_peaks_cwt(nparray[:,-1],np.arange(1,50))
         return peaks, peak_props
+    
+    def check_noise(self, noise_threshold=5.0):
+        # Check if the signal is noisy by looking at the standard deviation of the baseline region
+        fcs = ["FC1", "FC2", "FC3", "FC4"]
+        for fc in fcs:
+            dt = CREOPTIX_TIME_STEP
+            ibaseline_end = int(np.floor(self.t_baseline / dt))
+            if self.adjusted_dataset:
+                baseline_std = np.std(self.adjusted_dataset[fc][0:ibaseline_end])
+            else:
+                baseline_std = np.std(self.dataset[fc][0:ibaseline_end])
+            if baseline_std > noise_threshold:
+                self.noise_values[fc] = True
+            else:
+                self.noise_values[fc] = False
+        return
 
 
-def ingest_project_data(xml_path, h5_path):
+def ingest_project_data(xml_path, h5_path, results_path=pathlib.Path(".")):
     cycles = []
     xml = read_project_xml(xml_path)
     root = xml.getroot()
+    pulse_series = []
+    acquisition_rates = []
     for serie in root.iter("Serie"):
         if serie.find("Type").text == "Pulse":
-            pulse_serie = serie
-            break
-    serie_cycles = pulse_serie.iter("Cycle")  # iterator
+            pulse_series.append(serie)
+            rate = serie.find("AcquisitionRate").text
+            acquisition_rates.append(rate)
 
-    with h5py.File(h5_path, "r") as h5_file:
-        for cycle in serie_cycles:
-            cycle_type = cycle.find("CycleType").text
-            cycle_number = cycle.find("Index").text
-            guid = cycle.find("Guid").text
-            contact = cycle.find("ContactTime").text
-            dissociation = cycle.find("TimeAfterInjection").text
-            baseline = cycle.find("BaselineDuration").text
-            reagent_ref = cycle.find("ReagentRef")
+    for i, ps in enumerate(pulse_series):
+        subdir = pathlib.Path(results_path / f"Serie_{i+1:02d}")
+        subdir.mkdir(parents=True, exist_ok=True)
+        if "RAPID Kinetics: " not in ps.find("Name").text:
+            print(f"Warning: pulse serie {i+1:02d} name is different from 'RAPID Kinetics: ' ({ps.find('Name').text}).")
 
-            dataset = get_h5_data_for_guid(h5_file, guid)
-            data_to_keep = ["Time", "FC1", "FC2", "FC3", "FC4"]
-            # cols_to_keep = [HDF5_CYCLE_DSET_COLS[lab] for lab in data_labels]
-            cycle_data = {
-                lab: dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep
-            }
-            # Add reagent data
-            side = reagent_ref.find("AutosamplerLocation").get("Side")
-            slot = reagent_ref.find("AutosamplerLocation").get("Slot")
-            for rgnt in pulse_serie.findall("AutosamplerVM/"+side+"Rack/Reagents/Reagent"):
-                if rgnt.attrib["Slot"] == slot:
-                    reagent_info = copy.copy(rgnt.attrib)
+        serie_cycles = ps.iter("Cycle")  # iterator
+        try:
+            with h5py.File(h5_path, "r") as h5_file:
+                for cycle in serie_cycles:
+                    cycle_type = cycle.find("CycleType").text
+                    cycle_number = cycle.find("Index").text
+                    guid = cycle.find("Guid").text
+                    contact = cycle.find("ContactTime").text
+                    dissociation = cycle.find("TimeAfterInjection").text
+                    baseline = cycle.find("BaselineDuration").text
+                    reagent_ref = cycle.find("ReagentRef")
+                    sampleid = cycle.find("Name").text.split(" - ")[2]
+                    for marker in cycle.iter("Marker"):
+                        if marker.find("Type").text == "Rinse":
+                            rinse = marker.find("X").text
 
-            cycles.append(
-                CreoptixCycle(
-                    cycle_data,
-                    cycle_type,
-                    cycle_number,
-                    guid,
-                    t_contact=float(contact),
-                    t_dissociation=float(dissociation),
-                    t_baseline=float(baseline),
-                    reagent=reagent_info
-                )
-            )
+                    dataset = get_h5_data_for_guid(h5_file, guid)
+                    data_to_keep = ["Time", "FC1", "FC2", "FC3", "FC4"]
+                    # cols_to_keep = [HDF5_CYCLE_DSET_COLS[lab] for lab in data_labels]
+                    cycle_data = {
+                        lab: dataset[HDF5_CYCLE_DSET_COLS[lab]][:] for lab in data_to_keep
+                    }
+                    # Add reagent data
+                    side = reagent_ref.find("AutosamplerLocation").get("Side")
+                    slot = reagent_ref.find("AutosamplerLocation").get("Slot")
+                    for rgnt in ps.findall("AutosamplerVM/"+side+"Rack/Reagents/Reagent"):
+                        if rgnt.attrib["Slot"] == slot:
+                            reagent_info = copy.copy(rgnt.attrib)
+
+                    cycles.append(
+                        CreoptixCycle(
+                            cycle_data,
+                            cycle_type,
+                            cycle_number,
+                            guid,
+                            t_contact=float(contact),
+                            t_dissociation=float(dissociation),
+                            t_baseline=float(baseline),
+                            reagent=reagent_info,
+                            sampleid=sampleid,
+                            rinse=rinse,
+                            subdir=subdir.name,
+                            acquisition_rate=float(acquisition_rates[i])
+                        )
+                    )
+        except Exception as e:
+            print(f"Error occurred while processing pulse serie {i+1:02d}: {e}")
     return cycles
