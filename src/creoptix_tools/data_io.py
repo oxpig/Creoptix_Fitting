@@ -116,6 +116,7 @@ class CreoptixCycle:
         self.acquisition_rate=acquisition_rate
         self.conc_wrt_time=conc_wrt_time
         self.pulses=pulses
+        self.dissoc_phases=None
         self.baseline_values = {
             "FC1": None,
             "FC2": None,
@@ -156,7 +157,7 @@ class CreoptixCycle:
         else:
             self.dissoc_phases=[]
             t0 = 2.0
-            self.pulses.append(self.t_disssociation) # final dissociation phase length
+            self.pulses.append(self.t_dissociation) # final dissociation phase length
             pulses = self.pulses
             if len(pulses) % 2 != 0:
                 raise Exception(f"Error, number of time points for pulses is not even."
@@ -297,7 +298,7 @@ class CreoptixCycle:
         normalised_response = (most_recent_dmso.dataset[fc]-min_response) / (max_response-min_response)
         #print(f"Max response: {max_response:.3f} so Normalised Response:{normalised_response}")
         conc_wrt_time = normalised_response * input_conc
-        #print(f"{conc_wrt_time}")
+        print(f"Length of conc_wrt_time: {len(conc_wrt_time)}")
         self.conc_wrt_time=conc_wrt_time
         return
 
@@ -370,6 +371,7 @@ def ingest_project_data(xml_path, h5_path, results_path=pathlib.Path(".")):
                             t_dissociation=float(dissociation),
                             t_baseline=float(baseline),
                             reagent=reagent_info,
+                            pulses=pulses,
                             sampleid=sampleid,
                             rinse=rinse,
                             subdir=subdir.name,

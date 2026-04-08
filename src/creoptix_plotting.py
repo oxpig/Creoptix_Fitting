@@ -80,8 +80,8 @@ def perform_creoptix_fitting(
         cyc.calculate_baselines()
         cyc.apply_corrections()
         cyc.check_noise()
-        # if cyc.type == "Sample":
-        #     cyc.get_conc_wrt_time(cycles_data)
+        if cyc.type == "Sample":
+            cyc.get_conc_wrt_time(cycles_data)
         # blank = cyc.get_most_recent_sample_of_type(cycles_data, sample_type="Blank")
 
         # if last_blank:
