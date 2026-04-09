@@ -139,6 +139,11 @@ class CreoptixCycle:
             "FC3-1": None,
             "FC4-1": None
         }  # to be filled in after plotting/classification
+        self.fitted_params = {  # ka, kd, rmax
+            "FC2-1": [None, None, None],
+            "FC3-1": [None, None, None],
+            "FC4-1": [None, None, None],
+        }  # to be filled in after fitting
 
         if self.reagent and self.type == "Sample":
             rgnt_conc_value, rgnt_conc_unit = self.reagent["Concentration"].split()
@@ -298,7 +303,7 @@ class CreoptixCycle:
         normalised_response = (most_recent_dmso.dataset[fc]-min_response) / (max_response-min_response)
         #print(f"Max response: {max_response:.3f} so Normalised Response:{normalised_response}")
         conc_wrt_time = normalised_response * input_conc
-        print(f"Length of conc_wrt_time: {len(conc_wrt_time)}")
+        # print(f"Length of conc_wrt_time: {len(conc_wrt_time)}")
         self.conc_wrt_time=conc_wrt_time
         return
 

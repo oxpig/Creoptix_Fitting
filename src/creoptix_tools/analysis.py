@@ -2,6 +2,35 @@ import scipy
 import numpy as np
 import pathlib
 import matplotlib.pyplot as plt
+from collections import namedtuple
+
+BindingParams=namedtuple("BindingParams",["ka","kd","Rmax"])
+
+def tCR_data_in_intervals(tCR_data,intervals):
+    """
+    Check if each value in tpoints lies within any of the given intervals.
+
+    Parameters:
+        tpoints : array-like of floats
+        intervals : array-like of shape (n_intervals, 2)
+
+    Returns:
+        Boolean NumPy array of same shape as tpoints
+    """
+    tCR_data = np.asarray(tCR_data)
+    intervals = np.asarray(intervals)
+
+    tpoints = tCR_data[:,0]
+
+    starts = intervals[:, 0]
+    ends = intervals[:, 1]
+
+    # Broadcast: compare all points against all intervals
+    mask = (tpoints[:, None] >= starts) & (tpoints[:, None] <= ends)
+
+    # Reduce across intervals: True if in ANY interval
+    row_mask = mask.any(axis=1)
+    return tCR_data[row_mask]
 
 class CreoptixModel:
     def __init__(self,t_data,C_data,R_data):  
@@ -10,6 +39,12 @@ class CreoptixModel:
         self.R_data = R_data
     
         self.R_fit = None
+
+        # self.initial_params = None
+        self.final_params = None
+
+        # self.initial_params_diss_only = None
+        # self.final_params_diss_only = None
 
     def _get_C(self,t):
         t_array = np.asarray(self.t_data)
@@ -95,3 +130,34 @@ class CreoptixModel:
         print(f"By INT -- ka = {ka_est}, kd = {kd_est}, Rmax = {Rmax_est}")
         # print(f"R_fit = {self.R_fit}")
         return ka_est, kd_est, Rmax_est
+
+
+def perform_fitting(cycle,tdata,Cdata,Rdata,t0=0.,tend=45.0,dissoc_only=False):
+    # fit_numerical_derivatives(tdata,cycle.conc_wrt_time[:window],ydata2-ydata1)
+    # Get index of t=0 and start fitting from here
+    t0 = 0.0
+    tend = 45.0
+    # Try fitting to only dissociation curves like Creoptix
+    print(f"tdata shape: {tdata.shape}")
+    print(f"Cdata shape: {Cdata.shape}")
+    print(f"Rdata shape: {Rdata.shape}")
+    tCR_data = np.vstack([tdata, Cdata, Rdata]).T
+    print(f"tCR_data shape: {tCR_data.shape}")
+    # Don't fit to t<0 or t>tend
+    tCR_tofit = tCR_data_in_intervals(
+        tCR_data,[(t0,tend)]
+    )
+    if dissoc_only:
+        print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
+        tCR_tofit = tCR_data_in_intervals(tCR_tofit,cycle.dissoc_phases)
+    print(f"tCR_tofit shape: {tCR_tofit.shape}")
+
+    model = CreoptixModel(
+                        tCR_tofit[:,0],
+                        tCR_tofit[:,1],
+                        tCR_tofit[:,2],
+                        )
+
+    ka,kd,rmax = model.integrate_ivp()
+    model.final_params = BindingParams(ka,kd,rmax)
+    return model

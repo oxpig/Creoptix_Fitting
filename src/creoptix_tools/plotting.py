@@ -3,7 +3,7 @@ import scipy
 import matplotlib.pyplot as plt
 import pathlib
 from creoptix_tools.data_io import CREOPTIX_TIME_STEP
-from .analysis import CreoptixModel
+from .analysis import CreoptixModel, BindingParams, perform_fitting
 
 def tCR_data_in_intervals(tCR_data,intervals):
     """
@@ -69,7 +69,7 @@ def plot_sensogram(
                 blank_dataset = correct_for_blank.dataset
             window = min(window, len(blank_dataset["FC1"]))
             ydata1 = ydata1[:window] - blank_dataset["FC1"][:window]
-            ydata2 = ydata2[:window] - blank_dataset["FC2"][:window]
+            ydata2 = ydata2[:window] - blank_dataset[current_channel][:window]
             tdata = tdata[:window]
             # plt.close(fig)
             # fig = plt.figure(layout="constrained")
@@ -214,65 +214,40 @@ def plot_sensogram(
             print(f"Conc peaks {conc_peaks} occur at times: {tdata[conc_peaks]}")
 
             print(f"Fitting for Cycle {cycle.cycle_num}...")
-            # fit_numerical_derivatives(tdata,cycle.conc_wrt_time[:window],ydata2-ydata1)
-            # Get index of t=0 and start fitting from here
-            t0 = 0.0
-            tend = 45.0
-            # Try fitting to only dissociation curves like Creoptix
-            print(f"tdata shape: {tdata.shape}")
-            print(f"Cdata shape: {Cdata.shape}")
-            print(f"Rdata shape: {Rdata.shape}")
-            tCR_data = np.vstack([tdata[:window], Cdata, Rdata]).T
-            print(f"tCR_data shape: {tCR_data.shape}")
-            # Don't fit to t<0
-            tCR_data = tCR_data_in_intervals(
-                tCR_data,[(t0,tend)]
-                )
-
-            model_all = CreoptixModel(
-                                tCR_data[:,0],
-                                tCR_data[:,1],
-                                tCR_data[:,2],
-                                )
-       
-            ka,kd,rmax = model_all.integrate_ivp()
+            model_all = perform_fitting(cycle,tdata[:window],Cdata,Rdata)
+            ka,kd,rmax = model_all.final_params
+            # assume we want to keep fitted params from all data, not dissoc_only
+            cycle.fitted_params[f"{current_channel}-1"] = [ka, kd, rmax]
 
             markersize=5
             ax2.plot(
-                tCR_data[0::5,0],
+                model_all.t_data[0::5],
                 model_all.R_fit[0::5],
                 'o', markersize=markersize, markerfacecolor="none",
                 color="turquoise",
                 label=f'All data (ka = {ka:.2f}, kd = {kd:.2f}, Rmax = {rmax:.2f})'
             )
             ax2.plot(
-                tCR_data[:,0],
-                model_all.R_0,
+                model_all.t_data[0::5],
+                model_all.R_0[0::5],
                 'x',markersize=markersize,
                 color="turquoise",
                 label=f'Initial guess',
             )
 
             print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
-            tCR_tofit = tCR_data_in_intervals(tCR_data,cycle.dissoc_phases)
-            print(f"tCR_data shape: {tCR_tofit.shape}")
-            model_dissoc = CreoptixModel(
-                                tCR_tofit[:,0],
-                                tCR_tofit[:,1],
-                                tCR_tofit[:,2],
-                                )
-       
-            ka,kd,rmax = model_dissoc.integrate_ivp()
+            model_dissoc = perform_fitting(cycle,tdata[:window],Cdata,Rdata,dissoc_only=True)
+            ka,kd,rmax = model_dissoc.final_params
             ax2.plot(
-                tCR_tofit[:,0],
-                model_dissoc.R_fit,
+                model_dissoc.t_data[0::5],
+                model_dissoc.R_fit[0::5],
                 'o',markersize=markersize,markerfacecolor="none",
                 color="purple",
                 label=f'Dissoc data (ka = {ka:.2f}, kd = {kd:.2f}, Rmax = {rmax:.2f})'
             )
             ax2.plot(
-                tCR_tofit[:,0],
-                model_dissoc.R_0,
+                model_dissoc.t_data[0::5],
+                model_dissoc.R_0[0::5],
                 'x',markersize=markersize,
                 color="purple",label=f'Dissoc initial guess'
             )
@@ -280,7 +255,7 @@ def plot_sensogram(
 
             for ax in [ax1, ax2]:
                 for start, end in cycle.dissoc_phases:
-                    ax.axvspan(start, end, color="gray",alpha=0.3, linewidth=None, linestyle="None")
+                    ax.axvspan(start, end, color="gray",alpha=0.2, linewidth=None, linestyle="None")
 
         # these are matplotlib.patch.Patch properties
         color = {
