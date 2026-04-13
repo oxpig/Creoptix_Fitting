@@ -188,7 +188,8 @@ def plot_sensogram(
                             "Binding:Noisy", 
                             "Binding:Drift",
                             "Binding:Noisy:Drift",
-                            "Check"
+                            "Check",
+                            "Non-specific"
                               ]
 
         if binding_type in fitting_candidates and cycle.conc_wrt_time is not None:

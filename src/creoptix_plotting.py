@@ -70,16 +70,19 @@ def perform_creoptix_fitting(
         "Response_FC2-1": [],
         "kA_FC2-1": [],
         "kD_FC2-1": [],
+        "bigKD_FC2-1": [],
         "Rmax_FC2-1": [],
         "BindingType_FC3-1": [],
         "Response_FC3-1": [],
         "kA_FC3-1": [],
         "kD_FC3-1": [],
+        "bigKD_FC3-1": [],
         "Rmax_FC3-1": [],
         "BindingType_FC4-1": [],
         "Response_FC4-1": [],
         "kA_FC4-1": [],
         "kD_FC4-1": [],
+        "bigKD_FC4-1": [],
         "Rmax_FC4-1": [],
     }
     n_samples = 0
@@ -128,8 +131,15 @@ def perform_creoptix_fitting(
             for channel in ["FC2", "FC3", "FC4"]:
                 result_data[f"BindingType_{channel}-1"].append(cyc.binding_values[f"{channel}-1"])
                 result_data[f"Response_{channel}-1"].append(int(np.floor(cyc.response_values[f"{channel}-1"])))
-                result_data[f"kA_{channel}-1"].append(cyc.fitted_params[f"{channel}-1"][0])
-                result_data[f"kD_{channel}-1"].append(cyc.fitted_params[f"{channel}-1"][1])
+                ka = cyc.fitted_params[f"{channel}-1"][0]
+                kd = cyc.fitted_params[f"{channel}-1"][1]
+                result_data[f"kA_{channel}-1"].append(ka)
+                result_data[f"kD_{channel}-1"].append(kd)
+                if ka is not None and kd is not None:
+                    bigKD = kd/ ka
+                else:
+                    bigKD = None
+                result_data[f"bigKD_{channel}-1"].append(bigKD)
                 result_data[f"Rmax_{channel}-1"].append(cyc.fitted_params[f"{channel}-1"][2])
 
 
