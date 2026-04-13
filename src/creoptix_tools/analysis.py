@@ -118,7 +118,7 @@ class CreoptixModel:
         print(f"Initial guess at ka, kd, Rmax is: {p0}")
         # bounds: example enforce positivity for A and B
         lower = [0.0, 0.0, 0.0]
-        upper = [np.inf, np.inf, np.inf]
+        upper = [1.e12, 2.0, 1000.]
         res = scipy.optimize.least_squares(_residuals, p0, bounds=(lower, upper), method='trf', ftol=1e-8, xtol=1e-8)
             
         ka_est, kd_est, Rmax_est = res.x
