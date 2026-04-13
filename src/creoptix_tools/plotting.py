@@ -71,28 +71,24 @@ def plot_sensogram(
             ydata1 = ydata1[:window] - blank_dataset["FC1"][:window]
             ydata2 = ydata2[:window] - blank_dataset[current_channel][:window]
             tdata = tdata[:window]
-            # plt.close(fig)
-            # fig = plt.figure(layout="constrained")
-            # ax1 = fig.add_subplot(3, 1, 1)
-            # ax2 = fig.add_subplot(3, 1, 2, sharex=ax1)
-            # ax3 = fig.add_subplot(3, 1, 3, sharex=ax1)
-            # ax3.plot(
-            #     tdata,
-            #     blank_dataset["FC2"][:window] - blank_dataset["FC1"][:window],
-            #     label="Blank ID: " + str(correct_for_blank.cycle_num) + " FC(2-1)",
-            #     color="grey",
-            #     linestyle=":",
-            # )
-            # ax3.legend()
+            ax1 = subfigs[i].add_subplot(3, 1, 1)
+            ax2 = subfigs[i].add_subplot(3, 1, 2, sharex=ax1)
+            ax3 = subfigs[i].add_subplot(3, 1, 3, sharex=ax1)
+            ax3.plot(
+                tdata,
+                blank_dataset[current_channel][:window] - blank_dataset["FC1"][:window],
+                label="Blank ID: " + str(correct_for_blank.cycle_num) + f" FC({i+2}-1)",
+                color="grey",
+                linestyle=":",
+            )
+            ax3.legend()
         else:
             if diff:
                 ax1 = subfigs[i].add_subplot(2, 1, 1)
                 ax2 = subfigs[i].add_subplot(2, 1, 2, sharex=ax1)
             else:
                 ax1 = subfigs[i].add_subplot(1, 1, 1)
-                    
-        # ax3.plot()
-        # ax3.legend()
+
 
         ax1.plot(tdata, ydata1, label="Cycle ID: " + str(cycle.cycle_num) + " FC1")
         ax1.plot(tdata, ydata2, label="Cycle ID: " + str(cycle.cycle_num) + f" FC{i+2}")
