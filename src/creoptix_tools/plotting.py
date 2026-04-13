@@ -1,8 +1,35 @@
+import numpy as np
 import scipy
 import matplotlib.pyplot as plt
 import pathlib
-import numpy as np
 from creoptix_tools.data_io import CREOPTIX_TIME_STEP
+from .analysis import CreoptixModel, BindingParams, perform_fitting
+
+def tCR_data_in_intervals(tCR_data,intervals):
+    """
+    Check if each value in tpoints lies within any of the given intervals.
+
+    Parameters:
+        tpoints : array-like of floats
+        intervals : array-like of shape (n_intervals, 2)
+
+    Returns:
+        Boolean NumPy array of same shape as tpoints
+    """
+    tCR_data = np.asarray(tCR_data)
+    intervals = np.asarray(intervals)
+
+    tpoints = tCR_data[:,0]
+
+    starts = intervals[:, 0]
+    ends = intervals[:, 1]
+
+    # Broadcast: compare all points against all intervals
+    mask = (tpoints[:, None] >= starts) & (tpoints[:, None] <= ends)
+
+    # Reduce across intervals: True if in ANY interval
+    row_mask = mask.any(axis=1)
+    return tCR_data[row_mask]
 
 dt = CREOPTIX_TIME_STEP
 DELTA_DISS = int(np.floor(1.5 / dt)) # default response in dissociation phase 1.5 s after rinse time
@@ -61,6 +88,7 @@ def plot_sensogram(
                 ax2 = subfigs[i].add_subplot(2, 1, 2, sharex=ax1)
             else:
                 ax1 = subfigs[i].add_subplot(1, 1, 1)
+
 
         ax1.plot(tdata, ydata1, label="Cycle ID: " + str(cycle.cycle_num) + " FC1")
         ax1.plot(tdata, ydata2, label="Cycle ID: " + str(cycle.cycle_num) + f" FC{i+2}")
@@ -128,7 +156,7 @@ def plot_sensogram(
             marker="o",
             color="purple",
         )
-        
+        # print(f"Peaks of response diff for {cycle.cycle_num} are at times: {tdata[peak_data_diff]}")
         # Get linear regression of tail of sensogram before classifying binding type
         LR_result = scipy.stats.linregress(tdata[-200:], ydata2[-200:] - ydata1[-200:])
         binding_type = classify_sensogram(
@@ -143,7 +171,7 @@ def plot_sensogram(
             if not (-0.05 < LR_result.slope < 0.05):
                 binding_type += ":Drift"
         cycle.binding_values[f"{current_channel}-1"] = binding_type
-        # quality = "Good" if rtb[0] and flat_tail[0] else "Bad"
+
 
         # quality_text = f"{quality} \n Baseline? {rtb[0]} \n Flat tail? {flat_tail[0]}"
         # Plot lin reg of tail for FC(2-1)
@@ -154,6 +182,77 @@ def plot_sensogram(
             color="magenta",
             linestyle="--",
         )
+
+        fitting_candidates = [
+                            "Binding",
+                            "Binding:Noisy", 
+                            "Binding:Drift",
+                            "Binding:Noisy:Drift",
+                            "Check",
+                            "Non-specific"
+                              ]
+
+        if binding_type in fitting_candidates and cycle.conc_wrt_time is not None:
+            cycle.get_dissociation_phases()
+            window=min(window,len(cycle.conc_wrt_time))
+            Cdata = cycle.conc_wrt_time[:window]
+            Rdata = (ydata2 - ydata1)[:window]
+            # ax_conc = ax3.secondary_yaxis("right")
+            # ax_conc.set_label("Conc.")
+            # ax3.plot(
+            #     tdata,
+            #     cycle.conc_wrt_time[:window],
+            #     label="Blank ID: " + str(correct_for_blank.cycle_num) + " FC(2-1)",
+            #     color="purple",
+            #     linestyle=":",
+            # )
+            # ax3.fill_between(tdata,cycle.conc_wrt_time[:window],color="purple",alpha=0.2)
+            conc_peaks, _ = scipy.signal.find_peaks(cycle.conc_wrt_time[:window], prominence=1.0e-6)
+            print(f"Conc peaks {conc_peaks} occur at times: {tdata[conc_peaks]}")
+
+            print(f"Fitting for Cycle {cycle.cycle_num}...")
+            model_all = perform_fitting(cycle,tdata[:window],Cdata,Rdata)
+            ka,kd,rmax = model_all.final_params
+            # assume we want to keep fitted params from all data, not dissoc_only
+            cycle.fitted_params[f"{current_channel}-1"] = [ka, kd, rmax]
+
+            markersize=5
+            ax2.plot(
+                model_all.t_data[0::5],
+                model_all.R_fit[0::5],
+                'o', markersize=markersize, markerfacecolor="none",
+                color="turquoise",
+                label=f'All data (ka = {ka:.2f}, kd = {kd:.2f}, Rmax = {rmax:.2f})'
+            )
+            ax2.plot(
+                model_all.t_data[0::5],
+                model_all.R_0[0::5],
+                'x',markersize=markersize,
+                color="turquoise",
+                label=f'Initial guess',
+            )
+
+            print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
+            model_dissoc = perform_fitting(cycle,tdata[:window],Cdata,Rdata,dissoc_only=True)
+            ka,kd,rmax = model_dissoc.final_params
+            ax2.plot(
+                model_dissoc.t_data[0::5],
+                model_dissoc.R_fit[0::5],
+                'o',markersize=markersize,markerfacecolor="none",
+                color="purple",
+                label=f'Dissoc data (ka = {ka:.2f}, kd = {kd:.2f}, Rmax = {rmax:.2f})'
+            )
+            ax2.plot(
+                model_dissoc.t_data[0::5],
+                model_dissoc.R_0[0::5],
+                'x',markersize=markersize,
+                color="purple",label=f'Dissoc initial guess'
+            )
+
+
+            for ax in [ax1, ax2]:
+                for start, end in cycle.dissoc_phases:
+                    ax.axvspan(start, end, color="gray",alpha=0.2, linewidth=None, linestyle="None")
 
         # these are matplotlib.patch.Patch properties
         color = {
@@ -190,6 +289,7 @@ def plot_sensogram(
 
         ax1.legend()
         ax2.legend()
+
     plotfile = f"cycle{cycle.cycle_num}_{name}.png"
     fig.suptitle(f"cycle{cycle.cycle_num}_{name}_{cycle.sampleid}")
     fig.savefig(pathlib.Path(directory / cycle.subdir / plotfile), bbox_inches="tight")

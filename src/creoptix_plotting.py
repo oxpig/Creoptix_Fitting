@@ -68,19 +68,36 @@ def perform_creoptix_fitting(
         "SampleID": [],
         "BindingType_FC2-1": [],
         "Response_FC2-1": [],
+        "kA_FC2-1": [],
+        "kD_FC2-1": [],
+        "bigKD_FC2-1": [],
+        "Rmax_FC2-1": [],
         "BindingType_FC3-1": [],
         "Response_FC3-1": [],
+        "kA_FC3-1": [],
+        "kD_FC3-1": [],
+        "bigKD_FC3-1": [],
+        "Rmax_FC3-1": [],
         "BindingType_FC4-1": [],
-        "Response_FC4-1": []
+        "Response_FC4-1": [],
+        "kA_FC4-1": [],
+        "kD_FC4-1": [],
+        "bigKD_FC4-1": [],
+        "Rmax_FC4-1": [],
     }
     n_samples = 0
     for cyc in cycles_data:
+        # if cyc.cycle_num > 16:
+        #     break
         if cyc.type in ["Blank", "DMSO Cal.", "Sample", "ControlSample"]:
             n_samples += 1
         cyc.calculate_baselines()
         cyc.apply_corrections()
         cyc.check_noise()
+        if cyc.type == "Sample":
+            cyc.get_conc_wrt_time(cycles_data)
         # blank = cyc.get_most_recent_sample_of_type(cycles_data, sample_type="Blank")
+
         # if last_blank:
         #     # cycles_data indexed from 0 but cycle_num indexed from 1
         #     blank_cycle = cycles_data[most_recent_blank - 1]
@@ -114,6 +131,16 @@ def perform_creoptix_fitting(
             for channel in ["FC2", "FC3", "FC4"]:
                 result_data[f"BindingType_{channel}-1"].append(cyc.binding_values[f"{channel}-1"])
                 result_data[f"Response_{channel}-1"].append(int(np.floor(cyc.response_values[f"{channel}-1"])))
+                ka = cyc.fitted_params[f"{channel}-1"][0]
+                kd = cyc.fitted_params[f"{channel}-1"][1]
+                result_data[f"kA_{channel}-1"].append(ka)
+                result_data[f"kD_{channel}-1"].append(kd)
+                if ka is not None and kd is not None:
+                    bigKD = kd/ ka
+                else:
+                    bigKD = None
+                result_data[f"bigKD_{channel}-1"].append(bigKD)
+                result_data[f"Rmax_{channel}-1"].append(cyc.fitted_params[f"{channel}-1"][2])
 
 
     t_end = time.time()
