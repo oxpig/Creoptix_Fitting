@@ -5,32 +5,6 @@ import pathlib
 from creoptix_tools.data_io import CREOPTIX_TIME_STEP
 from .analysis import CreoptixModel, BindingParams, perform_fitting
 
-def tCR_data_in_intervals(tCR_data,intervals):
-    """
-    Check if each value in tpoints lies within any of the given intervals.
-
-    Parameters:
-        tpoints : array-like of floats
-        intervals : array-like of shape (n_intervals, 2)
-
-    Returns:
-        Boolean NumPy array of same shape as tpoints
-    """
-    tCR_data = np.asarray(tCR_data)
-    intervals = np.asarray(intervals)
-
-    tpoints = tCR_data[:,0]
-
-    starts = intervals[:, 0]
-    ends = intervals[:, 1]
-
-    # Broadcast: compare all points against all intervals
-    mask = (tpoints[:, None] >= starts) & (tpoints[:, None] <= ends)
-
-    # Reduce across intervals: True if in ANY interval
-    row_mask = mask.any(axis=1)
-    return tCR_data[row_mask]
-
 dt = CREOPTIX_TIME_STEP
 DELTA_DISS = int(np.floor(1.5 / dt)) # default response in dissociation phase 1.5 s after rinse time
 DELTA_BIND = int(np.floor(0.5 / dt)) # default response in binding phase 0.5 s before rinse time
