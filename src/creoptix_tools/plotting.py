@@ -3,7 +3,7 @@ import scipy
 import matplotlib.pyplot as plt
 import pathlib
 from creoptix_tools.data_io import CREOPTIX_TIME_STEP
-from .analysis import CreoptixModel, BindingParams, perform_fitting
+from .analysis import CreoptixModel, BindingParams, perform_fitting, fit_metrics
 
 dt = CREOPTIX_TIME_STEP
 DELTA_DISS = int(np.floor(1.5 / dt)) # default response in dissociation phase 1.5 s after rinse time
@@ -185,48 +185,64 @@ def plot_sensogram(
             print(f"Conc peaks {conc_peaks} occur at times: {tdata[conc_peaks]}")
 
             print(f"Fitting for Cycle {cycle.cycle_num}...")
-            model_all = perform_fitting(cycle,tdata[:window],Cdata,Rdata)
+            bootstrap = False
+            model_all = perform_fitting(cycle,tdata[:window],Cdata,Rdata,bootstrap=bootstrap)
             ka,kd,rmax = model_all.final_params
             # assume we want to keep fitted params from all data, not dissoc_only
             cycle.fitted_params[f"{current_channel}-1"] = [ka, kd, rmax]
 
-            markersize=5
+            markersize=4
             ax2.plot(
-                model_all.t_data[0::5],
-                model_all.R_fit[0::5],
-                'o', markersize=markersize, markerfacecolor="none",
+                model_all.t_data,
+                model_all.R_fit,
+                '-', markersize=markersize, markerfacecolor="none",
                 color="turquoise",
                 label=f'All data (ka = {ka:.2f}, kd = {kd:.2f}, Rmax = {rmax:.2f})'
             )
+            if bootstrap:
+                # print("LOWER INTERVAL",model_all.lower)
+                # print("UPPER INTERVAL",model_all.upper)
+                ax2.fill_between(model_all.t_data,
+                                 model_all.lower,
+                                 model_all.upper, 
+                                 color="lightblue",alpha=0.7,label="95% CI")
+            # ax2.plot(
+            #     model_all.t_data[0::5],
+            #     model_all.R_0[0::5],
+            #     'x',markersize=markersize,
+            #     color="turquoise",
+            #     label=f'Initial guess',
+            # )
             ax2.plot(
                 model_all.t_data[0::5],
-                model_all.R_0[0::5],
-                'x',markersize=markersize,
-                color="turquoise",
-                label=f'Initial guess',
+                model_all.residuals[0::5],
+                # 'x',markersize=markersize,
+                color="darkred",
+                label=f'Residuals',
             )
+            print(f"    Fit metrics: {fit_metrics(model_all.R_data,model_all.R_fit,3)}")
 
-            print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
-            model_dissoc = perform_fitting(cycle,tdata[:window],Cdata,Rdata,dissoc_only=True)
-            ka,kd,rmax = model_dissoc.final_params
-            ax2.plot(
-                model_dissoc.t_data[0::5],
-                model_dissoc.R_fit[0::5],
-                'o',markersize=markersize,markerfacecolor="none",
-                color="purple",
-                label=f'Dissoc data (ka = {ka:.2f}, kd = {kd:.2f}, Rmax = {rmax:.2f})'
-            )
-            ax2.plot(
-                model_dissoc.t_data[0::5],
-                model_dissoc.R_0[0::5],
-                'x',markersize=markersize,
-                color="purple",label=f'Dissoc initial guess'
-            )
+            # print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
+            # model_dissoc = perform_fitting(cycle,tdata[:window],Cdata,Rdata,dissoc_only=True)
+            # ka,kd,rmax = model_dissoc.final_params
+            # ax2.plot(
+            #     model_dissoc.t_data,
+            #     model_dissoc.R_fit,
+            #     '-',markersize=markersize,markerfacecolor="none",
+            #     color="purple",
+            #     label=f'Dissoc data (ka = {ka:.2f}, kd = {kd:.2f}, Rmax = {rmax:.2f})'
+            # )
+            # ax2.plot(
+            #     model_dissoc.t_data[0::5],
+            #     model_dissoc.R_0[0::5],
+            #     'x',markersize=markersize,
+            #     color="purple",label=f'Dissoc initial guess'
+            # ) 
 
 
             for ax in [ax1, ax2]:
                 for start, end in cycle.dissoc_phases:
-                    ax.axvspan(start, end, color="gray",alpha=0.2, linewidth=None, linestyle="None")
+                    ax.axvspan(start, end, color="gray",alpha=0.05, linewidth=None, linestyle="None")
 
         # these are matplotlib.patch.Patch properties
         color = {

@@ -87,8 +87,8 @@ def perform_creoptix_fitting(
     }
     n_samples = 0
     for cyc in cycles_data:
-        # if cyc.cycle_num > 16:
-        #     break
+        if cyc.cycle_num > 19:
+            break
         if cyc.type in ["Blank", "DMSO Cal.", "Sample", "ControlSample"]:
             n_samples += 1
         cyc.calculate_baselines()

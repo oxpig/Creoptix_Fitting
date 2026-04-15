@@ -42,6 +42,10 @@ class CreoptixModel:
 
         # self.initial_params = None
         self.final_params = None
+        self.residuals = None
+
+        self.upper = None
+        self.lower = None
 
         # self.initial_params_diss_only = None
         # self.final_params_diss_only = None
@@ -55,8 +59,10 @@ class CreoptixModel:
     def _evaluate_dRdt(self,ti,Ri,ka,kd,Rmax):
         return ka*self._get_C(ti)*(Rmax-Ri) - kd*Ri
     
-    def _run_solver(self,params):
+    def _run_solver(self,params,t_eval=None):
         ka, kd, Rmax = params
+        if t_eval is None:
+            t_eval = self.t_data
         # t0 = t_data[0]
         # out = _evaluate_dRdt(t0, R_data[0], ka, kd, Rmax)
         # print("RHS output:", out, "type:", type(out), "shape:", getattr(out, "shape", None))
@@ -65,7 +71,10 @@ class CreoptixModel:
         # print("_get_C(t0) =>", repr(_get_C(t0)), "type:", type(_get_C(t0)), "shape:", getattr(_get_C(t0), "shape", None))
         res = scipy.integrate.solve_ivp(lambda t,R: self._evaluate_dRdt(t,R,ka,kd,Rmax),
                                         (self.t_data[0], self.t_data[-1]),
-                                        [self.R_data[0]],t_eval=self.t_data, method="RK45")
+                                        [self.R_data[0]],
+                                        t_eval=t_eval,
+                                        method="RK45",
+                                        )
         if not res.success:
             return np.full_like(self.R_data, 1e10)
         return res.y[0]
@@ -102,21 +111,21 @@ class CreoptixModel:
         print(f"By DIFF -- ka = {ka_est}, kd = {kd_est}, Rmax = {Rmax_est}")
         return ka_est, kd_est, Rmax_est
 
-    def integrate_ivp(self):
+    def integrate_ivp(self,t_eval=None):
         # integrate dR/dt and solve initial value problem
         # use non-linear least squares to fit and iterate
             
-        def _residuals(params):
-            R_sim = self._run_solver(params)
+        def _residuals(params,t_eval=t_eval):
+            R_sim = self._run_solver(params,t_eval=t_eval)
             return R_sim - self.R_data
             
         # initial guess (use simple heuristics or results from linear method)
-        p0 = self.fit_numerical_derivatives()
-        print(f"Numerical DIFF suggests ka, kd, Rmax is: {p0}")
+        # p0 = self.fit_numerical_derivatives()
+        # print(f"Numerical DIFF suggests ka, kd, Rmax is: {p0}")
         p0 = [40000, 0.1, 100.]   # tune as needed
         # p0 = [55440.0, 0.186, 23.0]   # tune as needed
         print(f"Initial guess at ka, kd, Rmax is: {p0}")
-        # bounds: example enforce positivity for A and B
+        # bounds
         lower = [0.0, 0.0, 0.0]
         upper = [1.e12, 2.0, 1000.]
         res = scipy.optimize.least_squares(_residuals, p0, bounds=(lower, upper), method='trf', ftol=1e-8, xtol=1e-8)
@@ -124,15 +133,16 @@ class CreoptixModel:
         ka_est, kd_est, Rmax_est = res.x
 
         # Save final fitted data for plotting
-        self.R_0 = self._run_solver(p0)
-        self.R_fit = self._run_solver([ka_est,kd_est,Rmax_est])
+        self.R_0 = self._run_solver(p0,t_eval=t_eval)
+        self.R_fit = self._run_solver([ka_est,kd_est,Rmax_est],t_eval=t_eval)
+        self.residuals = res.fun
 
         print(f"By INT -- ka = {ka_est}, kd = {kd_est}, Rmax = {Rmax_est}")
         # print(f"R_fit = {self.R_fit}")
         return ka_est, kd_est, Rmax_est
 
 
-def perform_fitting(cycle,tdata,Cdata,Rdata,t0=0.,tend=45.0,dissoc_only=False):
+def perform_fitting(cycle,tdata,Cdata,Rdata,t0=0.,tend=45.0,dissoc_only=False,bootstrap=False):
     # fit_numerical_derivatives(tdata,cycle.conc_wrt_time[:window],ydata2-ydata1)
     # Get index of t=0 and start fitting from here
     t0 = 0.0
@@ -160,4 +170,79 @@ def perform_fitting(cycle,tdata,Cdata,Rdata,t0=0.,tend=45.0,dissoc_only=False):
 
     ka,kd,rmax = model.integrate_ivp()
     model.final_params = BindingParams(ka,kd,rmax)
+
+    if bootstrap:
+        n_boot=50
+        R_boot = []
+        for _ in range(n_boot):
+            # resample indices with replacement
+            idx = np.random.choice(len(tCR_tofit[:,0]), len(tCR_tofit[:,0]), replace=True)
+            
+            t_bs = tCR_tofit[idx,0]
+            C_bs = tCR_tofit[idx,1]
+            R_bs = tCR_tofit[idx,2]
+            
+            # IMPORTANT: sort time for ODE solve
+            order = np.argsort(t_bs,kind="stable")
+            t_bs = t_bs[order]
+            C_bs = C_bs[order]
+            R_bs = R_bs[order]
+            
+            # refit parameters
+            bs_model = CreoptixModel(t_bs,C_bs,R_bs)
+            # Note that within solve_ivp, t_eval needs to be sorted, but it checks that
+            # diffs between sequential elements are <=0 (i.e. equal elements aren't permitted).
+            # This therefore fails even when using stable sorting algorithms.
+            # If bootstrapping with identical elements, need to construct t_eval differently
+            # and specify explicitly to ensure every element is unique.
+            t_eval = np.linspace(t_bs[0],t_bs[-1],num=len(tCR_tofit))
+            # print("t_eval",t_eval)
+            params_bs = bs_model.integrate_ivp(
+                                            t_eval=t_eval
+                                            )
+            R_boot.append(bs_model.R_fit)
+
+        R_boot = np.array(R_boot)
+
+        model.lower = np.percentile(R_boot, 2.5, axis=0)
+        model.upper = np.percentile(R_boot, 97.5, axis=0)
+
     return model
+
+def fit_metrics(y, yhat, p, sigma=None):
+    y = np.asarray(y)
+    yhat = np.asarray(yhat)
+    resid = y - yhat
+    n = len(y)
+
+    ss_res = np.sum(resid**2)
+    ss_tot = np.sum((y - np.mean(y))**2)
+
+    rmse = np.sqrt(ss_res / n)
+    mae = np.mean(np.abs(resid))
+    r2 = 1 - ss_res / ss_tot
+    r2_adj = 1 - (1 - r2) * (n - 1) / (n - p - 1)
+
+    sigma2_hat = ss_res / n
+    loglik = -0.5 * n * (np.log(2 * np.pi * sigma2_hat) + 1)
+    aic = 2 * p - 2 * loglik
+    bic = p * np.log(n) - 2 * loglik
+
+    out = {
+        "SSE": ss_res,
+        "RMSE": rmse,
+        "MAE": mae,
+        "R2": r2,
+        "R2_adj": r2_adj,
+        "AIC": aic,
+        "BIC": bic,
+    }
+
+    if sigma is not None:
+        sigma = np.asarray(sigma)
+        chi2 = np.sum((resid / sigma)**2)
+        out["Chi2"] = chi2
+        out["Chi2_red"] = chi2 / (n - p)
+
+    return out
+
