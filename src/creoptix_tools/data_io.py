@@ -150,6 +150,11 @@ class CreoptixCycle:
             "FC3-1": [None, None, None],
             "FC4-1": [None, None, None],
         }  # to be filled in after fitting
+        self.fitting_metrics = {  
+            "FC2-1": None,
+            "FC3-1": None,
+            "FC4-1": None,
+        }  # to be filled in after fitting
 
         if self.reagent and self.type == "Sample":
             rgnt_conc_value, rgnt_conc_unit = self.reagent["Concentration"].split()
@@ -180,7 +185,7 @@ class CreoptixCycle:
                 t0+sum(pulses[:n+2]) for n in range(0,len(pulses),2)
             ])
             self.dissoc_phases=list(zip(ti_starts,ti_ends))
-            print(f"Dissociation phases = {self.dissoc_phases}")
+            # print(f"Dissociation phases = {self.dissoc_phases}")
             return
            
     def get_most_recent_sample_of_type(self, cycles_data, sample_type=None):
@@ -361,7 +366,7 @@ def ingest_project_data(xml_path, h5_path, results_path=pathlib.Path(".")):
                     pulses = []
                     for ip,p in enumerate(pulse_data):
                         pulse_data[ip] = float(p.text)
-                    print(f"Pulse data for cycle {cycle_number}: {pulse_data}")
+                    # print(f"Pulse data for cycle {cycle_number}: {pulse_data}")
                     # pulses = zip(pulse_data[0::2],pulse_data[1::2])
                     # pulses = [Pulse(duration=x,gap=y) for (x,y) in pulses]
                     pulses = pulse_data

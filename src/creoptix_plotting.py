@@ -72,18 +72,30 @@ def perform_creoptix_fitting(
         "kD_FC2-1": [],
         "bigKD_FC2-1": [],
         "Rmax_FC2-1": [],
+        "Fit:R^2_FC2-1": [],
+        "Fit:RMSE_FC2-1": [],
+        "Fit:Sqrt(Chi^2)_FC2-1" : [],
+        "Fit:red_Chi^2_FC2-1" : [],
         "BindingType_FC3-1": [],
         "Response_FC3-1": [],
         "kA_FC3-1": [],
         "kD_FC3-1": [],
         "bigKD_FC3-1": [],
         "Rmax_FC3-1": [],
+        "Fit:R^2_FC3-1": [],
+        "Fit:RMSE_FC3-1": [],
+        "Fit:Sqrt(Chi^2)_FC3-1" : [],
+        "Fit:red_Chi^2_FC3-1" : [],
         "BindingType_FC4-1": [],
         "Response_FC4-1": [],
         "kA_FC4-1": [],
         "kD_FC4-1": [],
         "bigKD_FC4-1": [],
         "Rmax_FC4-1": [],
+        "Fit:R^2_FC4-1": [],
+        "Fit:RMSE_FC4-1": [],
+        "Fit:Sqrt(Chi^2)_FC4-1" : [],
+        "Fit:red_Chi^2_FC4-1" : [],
     }
     n_samples = 0
     for cyc in cycles_data:
@@ -141,7 +153,17 @@ def perform_creoptix_fitting(
                     bigKD = None
                 result_data[f"bigKD_{channel}-1"].append(bigKD)
                 result_data[f"Rmax_{channel}-1"].append(cyc.fitted_params[f"{channel}-1"][2])
-
+                # fitting metrics
+                if cyc.fitting_metrics[f"{channel}-1"] is not None:
+                    result_data[f"Fit:R^2_{channel}-1"].append(cyc.fitting_metrics[f"{channel}-1"]["R2"])
+                    result_data[f"Fit:RMSE_{channel}-1"].append(cyc.fitting_metrics[f"{channel}-1"]["RMSE"])
+                    result_data[f"Fit:Sqrt(Chi^2)_{channel}-1"].append(cyc.fitting_metrics[f"{channel}-1"]["Sqrt(Chi2)"])
+                    result_data[f"Fit:red_Chi^2_{channel}-1"].append(cyc.fitting_metrics[f"{channel}-1"]["Chi2_red"])
+                else: # no fitting done
+                    result_data[f"Fit:R^2_{channel}-1"].append(None)
+                    result_data[f"Fit:RMSE_{channel}-1"].append(None)
+                    result_data[f"Fit:Sqrt(Chi^2)_{channel}-1"].append(None)
+                    result_data[f"Fit:red_Chi^2_{channel}-1"].append(None)
 
     t_end = time.time()
 
@@ -153,6 +175,17 @@ def perform_creoptix_fitting(
     result_df = pd.DataFrame(result_data)
     result_df.to_csv(
         pathlib.Path(results_path /  "binding_table.csv"),
+        index=False,
+    )
+    fitting_results = {k: result_data[k] for k in ["SerieID","CycleID","CycleType","SampleID",
+                                  "BindingType_FC2-1","bigKD_FC2-1","Fit:R^2_FC2-1","Fit:Sqrt(Chi^2)_FC2-1",
+                                  "BindingType_FC3-1","bigKD_FC3-1","Fit:R^2_FC3-1","Fit:Sqrt(Chi^2)_FC3-1",
+                                  "BindingType_FC4-1","bigKD_FC4-1","Fit:R^2_FC4-1","Fit:Sqrt(Chi^2)_FC4-1",
+                                  ]
+                                  }
+    fitting_df=pd.DataFrame(fitting_results)
+    fitting_df.to_csv(
+        pathlib.Path(results_path /  "fitting_table.csv"),
         index=False,
     )
 

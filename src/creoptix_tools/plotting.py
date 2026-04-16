@@ -220,8 +220,14 @@ def plot_sensogram(
                 color="darkred",
                 label=f'Residuals',
             )
-            print(f"    Fit metrics: {fit_metrics(model_all.R_data,model_all.R_fit,3)}")
 
+            # assume uncertainty sigma is normally distributed from baseline noise
+            sigma = np.sqrt(
+                            cycle.noise_values[current_channel]**2
+                            +cycle.noise_values["FC1"]**2
+                            )
+            cycle.fitting_metrics[f"{current_channel}-1"] = fit_metrics(model_all.R_data,model_all.R_fit,3,sigma=sigma)
+            
             # print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
             # model_dissoc = perform_fitting(cycle,tdata[:window],Cdata,Rdata,dissoc_only=True)
             # ka,kd,rmax = model_dissoc.final_params

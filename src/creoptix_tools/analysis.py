@@ -242,6 +242,7 @@ def fit_metrics(y, yhat, p, sigma=None):
         sigma = np.asarray(sigma)
         chi2 = np.sum((resid / sigma)**2)
         out["Chi2"] = chi2
+        out["Sqrt(Chi2)"] = np.sqrt(chi2)
         out["Chi2_red"] = chi2 / (n - p)
 
     return out
