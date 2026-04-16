@@ -128,6 +128,12 @@ class CreoptixCycle:
             "FC2": None,
             "FC3": None,
             "FC4": None}  # to track noise in each channel
+        self.is_noisy = {
+            "FC1": None,
+            "FC2": None,
+            "FC3": None,
+            "FC4": None  # to be determined based on noise_threshold
+        }
 
         self.binding_values = {
             "FC2-1": None,
@@ -288,10 +294,11 @@ class CreoptixCycle:
                 baseline_std = np.std(self.adjusted_dataset[fc][0:ibaseline_end])
             else:
                 baseline_std = np.std(self.dataset[fc][0:ibaseline_end])
+            self.noise_values[fc] = baseline_std
             if baseline_std > noise_threshold:
-                self.noise_values[fc] = True
+                self.is_noisy[fc] = True
             else:
-                self.noise_values[fc] = False
+                self.is_noisy[fc] = False
         return
 
     def get_conc_wrt_time(self,cycles_data,fc="FC2"):

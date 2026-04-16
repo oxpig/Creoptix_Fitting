@@ -140,7 +140,7 @@ def plot_sensogram(
             max_response=max_binding_response
         )
         if binding_type == "Binding":
-            if cycle.noise_values["FC1"] == True or cycle.noise_values[current_channel] == True:
+            if cycle.is_noisy["FC1"] == True or cycle.is_noisy[current_channel] == True:
                 binding_type += ":Noisy"
             if not (-0.05 < LR_result.slope < 0.05):
                 binding_type += ":Drift"
