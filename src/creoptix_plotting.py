@@ -107,7 +107,8 @@ def perform_creoptix_fitting(
         cyc.apply_corrections()
         cyc.check_noise()
         if cyc.type == "Sample":
-            cyc.get_conc_wrt_time(cycles_data)
+            for fc in ["FC1","FC2", "FC3", "FC4"]:
+                cyc.get_conc_wrt_time(cycles_data,fc=fc)
         # blank = cyc.get_most_recent_sample_of_type(cycles_data, sample_type="Blank")
 
         # if last_blank:
@@ -215,10 +216,11 @@ def perform_creoptix_fitting(
 
 def main():
     project_name = "TestProject"
-    data_dir = "C:/Users/stat0524-admin/Creoptix_Fitting/data/example/"
+    data_dir = "C:/Users/stat0524-admin/Creoptix_Fitting/data/example_4FC/"
     results_name = "PlottingResults"
     perform_creoptix_fitting(
-        "C:\\Users\\stat0524-admin\\Creoptix_Fitting\\data\\20250826_DENV-2 NS2B3 Binding Assay.cxw",
+        "C:\\Users\\stat0524-admin\\Creoptix_Fitting\\data\\example_4FC\\20260323_EV71 2A Binding assay.cxw",
+        #         "C:\\Users\\stat0524-admin\\Creoptix_Fitting\\data\\20250826_DENV-2 NS2B3 Binding Assay.cxw",
         project_name=project_name, data_dir=data_dir, results_dir=results_name
     )
 

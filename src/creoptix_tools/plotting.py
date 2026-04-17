@@ -166,22 +166,22 @@ def plot_sensogram(
                             "Non-specific"
                               ]
 
-        if binding_type in fitting_candidates and cycle.conc_wrt_time is not None:
+        if binding_type in fitting_candidates and cycle.conc_wrt_time[current_channel] is not None:
             cycle.get_dissociation_phases()
-            window=min(window,len(cycle.conc_wrt_time))
-            Cdata = cycle.conc_wrt_time[:window]
+            window=min(window,len(cycle.conc_wrt_time[current_channel]))
+            Cdata = cycle.conc_wrt_time[current_channel][:window]
             Rdata = (ydata2 - ydata1)[:window]
             # ax_conc = ax3.secondary_yaxis("right")
             # ax_conc.set_label("Conc.")
             # ax3.plot(
             #     tdata,
-            #     cycle.conc_wrt_time[:window],
+            #     cycle.conc_wrt_time[current_channel][:window],
             #     label="Blank ID: " + str(correct_for_blank.cycle_num) + " FC(2-1)",
             #     color="purple",
             #     linestyle=":",
             # )
-            # ax3.fill_between(tdata,cycle.conc_wrt_time[:window],color="purple",alpha=0.2)
-            conc_peaks, _ = scipy.signal.find_peaks(cycle.conc_wrt_time[:window], prominence=1.0e-6)
+            # ax3.fill_between(tdata,cycle.conc_wrt_time[current_channel][:window],color="purple",alpha=0.2)
+            conc_peaks, _ = scipy.signal.find_peaks(cycle.conc_wrt_time[current_channel][:window], prominence=1.0e-6)
             print(f"Conc peaks {conc_peaks} occur at times: {tdata[conc_peaks]}")
 
             print(f"Fitting for Cycle {cycle.cycle_num}...")
@@ -227,7 +227,8 @@ def plot_sensogram(
                             +cycle.noise_values["FC1"]**2
                             )
             cycle.fitting_metrics[f"{current_channel}-1"] = fit_metrics(model_all.R_data,model_all.R_fit,3,sigma=sigma)
-            
+            print(f" cycle.fitting_metrics: {cycle.fitting_metrics[f"{current_channel}-1"]}")
+
             # print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
             # model_dissoc = perform_fitting(cycle,tdata[:window],Cdata,Rdata,dissoc_only=True)
             # ka,kd,rmax = model_dissoc.final_params

@@ -94,7 +94,6 @@ class CreoptixCycle:
         t_baseline=45.0,
         adjusted_dataset=None,
         reagent=None,
-        conc_wrt_time=None,
         pulses=None,
         sampleid=None,
         rinse=0.0,
@@ -114,7 +113,6 @@ class CreoptixCycle:
         self.sampleid=sampleid
         self.subdir=subdir
         self.acquisition_rate=acquisition_rate
-        self.conc_wrt_time=conc_wrt_time
         self.pulses=pulses
         self.dissoc_phases=None
         self.baseline_values = {
@@ -134,7 +132,12 @@ class CreoptixCycle:
             "FC3": None,
             "FC4": None  # to be determined based on noise_threshold
         }
-
+        self.conc_wrt_time={
+            "FC1": None,
+            "FC2": None,
+            "FC3": None,
+            "FC4": None  # sensitivity of different FCs can vary, need to calculate conc for specific FC
+        }
         self.binding_values = {
             "FC2-1": None,
             "FC3-1": None,
@@ -316,7 +319,7 @@ class CreoptixCycle:
         #print(f"Max response: {max_response:.3f} so Normalised Response:{normalised_response}")
         conc_wrt_time = normalised_response * input_conc
         # print(f"Length of conc_wrt_time: {len(conc_wrt_time)}")
-        self.conc_wrt_time=conc_wrt_time
+        self.conc_wrt_time[fc]=conc_wrt_time
         return
 
 

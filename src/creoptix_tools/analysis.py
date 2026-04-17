@@ -143,24 +143,22 @@ class CreoptixModel:
 
 
 def perform_fitting(cycle,tdata,Cdata,Rdata,t0=0.,tend=45.0,dissoc_only=False,bootstrap=False):
-    # fit_numerical_derivatives(tdata,cycle.conc_wrt_time[:window],ydata2-ydata1)
     # Get index of t=0 and start fitting from here
     t0 = 0.0
     tend = 45.0
-    # Try fitting to only dissociation curves like Creoptix
-    print(f"tdata shape: {tdata.shape}")
-    print(f"Cdata shape: {Cdata.shape}")
-    print(f"Rdata shape: {Rdata.shape}")
+    # print(f"tdata shape: {tdata.shape}")
+    # print(f"Cdata shape: {Cdata.shape}")
+    # print(f"Rdata shape: {Rdata.shape}")
     tCR_data = np.vstack([tdata, Cdata, Rdata]).T
-    print(f"tCR_data shape: {tCR_data.shape}")
+    # print(f"tCR_data shape: {tCR_data.shape}")
     # Don't fit to t<0 or t>tend
     tCR_tofit = tCR_data_in_intervals(
         tCR_data,[(t0,tend)]
     )
     if dissoc_only:
-        print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
+        # print(f"    Pulse data suggests dissoc intervals are at: f{cycle.dissoc_phases}")
         tCR_tofit = tCR_data_in_intervals(tCR_tofit,cycle.dissoc_phases)
-    print(f"tCR_tofit shape: {tCR_tofit.shape}")
+    # print(f"tCR_tofit shape: {tCR_tofit.shape}")
 
     model = CreoptixModel(
                         tCR_tofit[:,0],
