@@ -1,10 +1,12 @@
-import pandas as pd
-import numpy as np
-import pathlib
-import zipfile
-import time
 import datetime
 import os
+import pathlib
+import time
+import zipfile
+
+import numpy as np
+import pandas as pd
+
 from creoptix_tools.data_io import ingest_project_data
 from creoptix_tools.plotting import plot_sensogram
 
@@ -32,14 +34,12 @@ def unzip_data(creoptix_zipfile, data_path):
     zf_obj = zipfile.ZipFile(creoptix_zipfile)
     members = ["cyclesData.h5", "_project.cx3"]
     zf_obj.extractall(members=members, path=data_path)
-    return
 
 
 def remove_working_files(data_path, filenames=["_project.cx3", "cyclesData.h5"]):
     for f in filenames:
         os.remove(pathlib.Path(data_path, f))
     os.rmdir(data_path)
-    return
 
 
 def perform_creoptix_fitting(
@@ -124,42 +124,48 @@ def perform_creoptix_fitting(
                 diff=True,
                 directory=results_path,
             )
-            result_data["SerieID"].append(cyc.subdir.split("_")[-1])  # extract series number from subdir name
+            result_data["SerieID"].append(
+                cyc.subdir.split("_")[-1]
+            )  # extract series number from subdir name
             result_data["CycleID"].append(cyc.cycle_num)
             result_data["CycleType"].append(cyc.type)
             result_data["SampleID"].append(cyc.sampleid)
             for channel in ["FC2", "FC3", "FC4"]:
-                result_data[f"BindingType_{channel}-1"].append(cyc.binding_values[f"{channel}-1"])
-                result_data[f"Response_{channel}-1"].append(int(np.floor(cyc.response_values[f"{channel}-1"])))
+                result_data[f"BindingType_{channel}-1"].append(
+                    cyc.binding_values[f"{channel}-1"]
+                )
+                result_data[f"Response_{channel}-1"].append(
+                    int(np.floor(cyc.response_values[f"{channel}-1"]))
+                )
                 ka = cyc.fitted_params[f"{channel}-1"][0]
                 kd = cyc.fitted_params[f"{channel}-1"][1]
                 result_data[f"kA_{channel}-1"].append(ka)
                 result_data[f"kD_{channel}-1"].append(kd)
                 if ka is not None and kd is not None:
-                    bigKD = kd/ ka
+                    bigKD = kd / ka
                 else:
                     bigKD = None
                 result_data[f"bigKD_{channel}-1"].append(bigKD)
-                result_data[f"Rmax_{channel}-1"].append(cyc.fitted_params[f"{channel}-1"][2])
-
+                result_data[f"Rmax_{channel}-1"].append(
+                    cyc.fitted_params[f"{channel}-1"][2]
+                )
 
     t_end = time.time()
 
-    print(
-        f"Plotted sensograms for {n_samples} cycles in {t_end - t_start} seconds."
-    )
+    print(f"Plotted sensograms for {n_samples} cycles in {t_end - t_start} seconds.")
 
     # Export a summary table of binding type and response for each channel of each cycle
     result_df = pd.DataFrame(result_data)
     result_df.to_csv(
-        pathlib.Path(results_path /  "binding_table.csv"),
+        pathlib.Path(results_path / "binding_table.csv"),
         index=False,
     )
 
     print(f"Of {n_samples} samples:")
     for bind_type in set(result_data["BindingType_FC2-1"]):
         cases = [
-            cycle_id for i, cycle_id in enumerate(result_data["CycleID"])
+            cycle_id
+            for i, cycle_id in enumerate(result_data["CycleID"])
             if result_data["BindingType_FC2-1"][i] == bind_type
             and result_data["BindingType_FC3-1"][i] == bind_type
             and result_data["BindingType_FC4-1"][i] == bind_type
@@ -168,7 +174,8 @@ def perform_creoptix_fitting(
     print("See binding_table.csv alongside sensogram plots for more details.")
     print("The following cycles have at least one active channel classifed as BINDING:")
     binding_cycles = [
-        cycle_id for i, cycle_id in enumerate(result_data["CycleID"])
+        cycle_id
+        for i, cycle_id in enumerate(result_data["CycleID"])
         if result_data["BindingType_FC2-1"][i] == "Binding"
         or result_data["BindingType_FC3-1"][i] == "Binding"
         or result_data["BindingType_FC4-1"][i] == "Binding"
@@ -186,7 +193,9 @@ def main():
     results_name = "PlottingResults"
     perform_creoptix_fitting(
         "C:\\Users\\stat0524-admin\\Creoptix_Fitting\\data\\20250826_DENV-2 NS2B3 Binding Assay.cxw",
-        project_name=project_name, data_dir=data_dir, results_dir=results_name
+        project_name=project_name,
+        data_dir=data_dir,
+        results_dir=results_name,
     )
 
 
